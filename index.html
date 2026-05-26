@@ -90,6 +90,16 @@
         height: 100% !important;
         display: block !important;
       }
+      /* Bee overlay scene — floats above camera feed but below UI chrome */
+      #bee-scene {
+        z-index: 11 !important;
+        pointer-events: none !important;
+        display: none;
+      }
+      #bee-scene.bees-active {
+        display: block;
+        pointer-events: auto !important;
+      }
       .a-enter-vr, .a-enter-ar,
       .a-enter-vr-button, .a-enter-ar-button { display: none !important; }
 
@@ -405,7 +415,7 @@
         background: transparent;
         pointer-events: none;
         justify-content: flex-end;
-        z-index: 10;
+        z-index: 14;
       }
 
       /* Hint pill that floats above the bees explaining what to do */
@@ -414,7 +424,7 @@
         bottom: calc(env(safe-area-inset-bottom, 0px) + 6.5rem);
         left: 50%;
         transform: translateX(-50%);
-        z-index: 12;
+        z-index: 15;
         color: #fdf6e3;
         font-family: var(--font-display);
         font-size: 1rem;
@@ -1039,7 +1049,34 @@
   <body data-state="intro">
 
     <!-- ============================================================
-         AR SCENE  ·  camera feed + bee.glb on detected can
+         BEE OVERLAY SCENE  ·  transparent canvas above camera feed
+         Rendered at z-index 12 so bees are always visible over the
+         MindAR video layer.
+         ============================================================ -->
+    <a-scene id="bee-scene"
+      embedded
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+      renderer="colorManagement: true, antialias: true, alpha: true"
+      color-space="sRGB"
+      transparent-bg
+    >
+      <a-assets timeout="30000">
+        <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false">
+        <a-entity cursor="rayOrigin: mouse; fuse: false"
+                  raycaster="objects: .bee-clickable; far: 50"></a-entity>
+        <!-- Bee swarm parented to camera — bees float in screen space. -->
+        <a-entity id="bee-swarm"></a-entity>
+      </a-camera>
+      <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
+      <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
+    </a-scene>
+
+    <!-- ============================================================
+         AR SCENE  ·  camera feed + image target detection
          ============================================================ -->
     <a-scene
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
@@ -1049,19 +1086,7 @@
       device-orientation-permission-ui="enabled: false"
       embedded
     >
-      <a-assets timeout="30000">
-        <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
-      </a-assets>
-
-      <a-camera position="0 0 0" look-controls="enabled: false">
-        <a-entity cursor="rayOrigin: mouse; fuse: false"
-                  raycaster="objects: .bee-clickable; far: 50"></a-entity>
-        <!-- Bee swarm parented to the camera so bees stay framed regardless
-             of where the marker is — they don't track the can. -->
-        <a-entity id="bee-swarm"></a-entity>
-      </a-camera>
-      <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
-      <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <!-- Marker target used purely as a trigger; nothing is parented here. -->
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
@@ -1259,6 +1284,21 @@
 
     <script>
       /* ============================================================
+         A-FRAME COMPONENT — transparent canvas for bee overlay scene
+         ============================================================ */
+      AFRAME.registerComponent('transparent-bg', {
+        init() {
+          this.el.sceneEl.addEventListener('renderstart', () => {
+            const renderer = this.el.sceneEl.renderer;
+            if (renderer) {
+              renderer.setClearColor(0x000000, 0);
+              renderer.setClearAlpha(0);
+            }
+          });
+        },
+      });
+
+      /* ============================================================
          A-FRAME COMPONENTS — bee animation + gold tint
          ============================================================ */
       AFRAME.registerComponent('free-fly', {
@@ -1322,7 +1362,8 @@
       const STATES = ['intro', 'permission', 'scan', 'bee', 'profile', 'map'];
       let state = 'intro';
       const body = document.body;
-      const scene = document.querySelector('a-scene');
+      const scene = document.querySelectorAll('a-scene')[1]; // MindAR scene (second)
+      const beeScene = document.getElementById('bee-scene'); // overlay scene
       const target0 = document.getElementById('target-0');
       const beeSwarm = document.getElementById('bee-swarm');
 
@@ -1335,6 +1376,8 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
+        // Show bee overlay scene only during bee state
+        beeScene.classList.toggle('bees-active', next === 'bee');
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
