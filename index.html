@@ -578,13 +578,32 @@
         height: 100%;
         overflow: hidden;
       }
+      /* Stage holds the map image + pin layer at a fixed aspect ratio so
+         lat/lng → % math stays exact regardless of phone screen shape.
+         Map source aspect ratio: 7001 / 4001 ≈ 1.75. */
+      .map-stage {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        max-width: calc((100% - 0px) * 1);
+        aspect-ratio: 1.75 / 1;
+        background: transparent;
+      }
+      /* Make stage fill whichever dimension is the limiting one */
+      @media (orientation: portrait) {
+        .map-stage { width: 100%; height: auto; }
+      }
+      @media (orientation: landscape) {
+        .map-stage { width: auto; height: 100%; }
+      }
       .map-img {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        object-position: center;
+        object-fit: fill;
         user-select: none;
         -webkit-user-drag: none;
         pointer-events: none;
@@ -1018,16 +1037,16 @@
           cursor="rayOrigin: mouse; fuse: false"
           raycaster="objects: .bee-clickable; far: 50"
         ></a-entity>
+        <!-- Bee swarm is a CHILD of the camera so the bees stay in view
+             regardless of how MindAR sets up the world camera. They do
+             NOT track the marker — finding the can just triggers spawn. -->
+        <a-entity id="bee-swarm"></a-entity>
       </a-camera>
       <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
       <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
 
-      <!-- Marker target used purely as a trigger; nothing is parented here so
-           the bees do NOT track the can. -->
+      <!-- Marker target used purely as a trigger; nothing is parented here. -->
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
-
-      <!-- Bee swarm lives in world/camera space, not on the target. -->
-      <a-entity id="bee-swarm"></a-entity>
     </a-scene>
 
     <!-- ============================================================
@@ -1168,10 +1187,11 @@
       </div>
 
       <div class="map-wrap" id="map-wrap">
-        <img class="map-img" src="./assets/world-map.png" alt="" draggable="false" />
-
-        <!-- Traces injected by JS -->
-        <div id="map-traces"></div>
+        <div class="map-stage" id="map-stage">
+          <img class="map-img" src="./assets/world-map.png" alt="" draggable="false" />
+          <!-- Traces + here-pin injected by JS, positioned in % of this stage -->
+          <div id="map-traces"></div>
+        </div>
 
         <!-- The single popup bubble (re-used for whichever pin is tapped) -->
         <div class="trace-bubble" id="trace-bubble" role="dialog" aria-modal="false">
@@ -1226,18 +1246,18 @@
          ============================================================ */
       AFRAME.registerComponent('free-fly', {
         schema: {
-          centerX:  { default: 0 },
-          centerY:  { default: 0 },
-          centerZ:  { default: -1.6 },
-          ampX:     { default: 0.9 },
-          ampY:     { default: 0.55 },
-          ampZ:     { default: 0.35 },
-          speedX:   { default: 0.6 },
-          speedY:   { default: 0.75 },
-          speedZ:   { default: 0.4 },
-          phaseX:   { default: 0 },
-          phaseY:   { default: 0 },
-          phaseZ:   { default: 0 },
+          centerX:  { type: 'number', default: 0 },
+          centerY:  { type: 'number', default: 0 },
+          centerZ:  { type: 'number', default: -1.5 },
+          ampX:     { type: 'number', default: 0.6 },
+          ampY:     { type: 'number', default: 0.35 },
+          ampZ:     { type: 'number', default: 0.2 },
+          speedX:   { type: 'number', default: 0.6 },
+          speedY:   { type: 'number', default: 0.75 },
+          speedZ:   { type: 'number', default: 0.4 },
+          phaseX:   { type: 'number', default: 0 },
+          phaseY:   { type: 'number', default: 0 },
+          phaseZ:   { type: 'number', default: 0 },
         },
         init: function () {
           this.t = Math.random() * 8;
@@ -1390,32 +1410,81 @@
       applyLang();
 
       /* ============================================================
-         PARALLAX — device tilt with pointer fallback
+         PARALLAX — device tilt (gyro) + touch + pointer + ambient sway.
+         Works on desktop (mouse), mobile (touch), and gyro-capable
+         devices. iOS 13+ requires explicit permission, requested when
+         the user taps Start.
          ============================================================ */
       const introBg   = document.getElementById('intro-bg');
       const introMist = document.getElementById('intro-mist');
       const introLogo = document.getElementById('intro-logo');
-      function applyParallax(nx, ny) {
-        // nx,ny in [-1,1]
-        const bx = nx * -14, by = ny * -10;
-        const mx = nx * -28, my = ny * -18;
-        const lx = nx *  10, ly = ny *  6;
-        introBg.style.transform   = `translate3d(${bx}px, ${by}px, 0) scale(1.06)`;
-        introMist.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
-        introLogo.style.transform = `translate3d(${lx}px, ${ly}px, 0)`;
+      let parallaxTarget = { x: 0, y: 0 };
+      let parallaxCurrent = { x: 0, y: 0 };
+      let parallaxIdleT = 0;
+
+      function setParallaxTarget(nx, ny) {
+        parallaxTarget.x = Math.max(-1, Math.min(1, nx));
+        parallaxTarget.y = Math.max(-1, Math.min(1, ny));
       }
-      window.addEventListener('pointermove', (e) => {
+
+      function tickParallax() {
+        // Idle sway so the intro feels alive even without input
+        parallaxIdleT += 0.012;
+        const idleX = Math.sin(parallaxIdleT) * 0.25;
+        const idleY = Math.cos(parallaxIdleT * 0.7) * 0.18;
+        const tx = parallaxTarget.x || idleX;
+        const ty = parallaxTarget.y || idleY;
+        // Ease toward target
+        parallaxCurrent.x += (tx - parallaxCurrent.x) * 0.08;
+        parallaxCurrent.y += (ty - parallaxCurrent.y) * 0.08;
+        const nx = parallaxCurrent.x;
+        const ny = parallaxCurrent.y;
+        if (introBg) {
+          introBg.style.transform   = `translate3d(${nx * -18}px, ${ny * -14}px, 0) scale(1.08)`;
+          introMist.style.transform = `translate3d(${nx * -32}px, ${ny * -22}px, 0)`;
+          introLogo.style.transform = `translate3d(${nx * 12}px, ${ny * 8}px, 0)`;
+        }
+        requestAnimationFrame(tickParallax);
+      }
+      requestAnimationFrame(tickParallax);
+
+      function pointerToTarget(clientX, clientY) {
+        const nx = (clientX / window.innerWidth)  * 2 - 1;
+        const ny = (clientY / window.innerHeight) * 2 - 1;
+        setParallaxTarget(nx, ny);
+      }
+      window.addEventListener('mousemove', (e) => {
         if (state !== 'intro') return;
-        const nx = (e.clientX / window.innerWidth)  * 2 - 1;
-        const ny = (e.clientY / window.innerHeight) * 2 - 1;
-        applyParallax(nx, ny);
+        pointerToTarget(e.clientX, e.clientY);
       });
-      window.addEventListener('deviceorientation', (e) => {
+      window.addEventListener('touchmove', (e) => {
         if (state !== 'intro') return;
-        const nx = Math.max(-1, Math.min(1, (e.gamma || 0) / 30));
-        const ny = Math.max(-1, Math.min(1, (e.beta  || 0) / 45));
-        applyParallax(nx, ny);
-      });
+        const t = e.touches[0];
+        if (!t) return;
+        pointerToTarget(t.clientX, t.clientY);
+      }, { passive: true });
+
+      function onOrientation(e) {
+        if (state !== 'intro') return;
+        const nx = (e.gamma || 0) / 30;
+        const ny = (e.beta  || 0) / 45;
+        setParallaxTarget(nx, ny);
+      }
+      function enableGyro() {
+        // iOS 13+ requires explicit permission
+        const DO = window.DeviceOrientationEvent;
+        if (DO && typeof DO.requestPermission === 'function') {
+          DO.requestPermission()
+            .then((res) => {
+              if (res === 'granted') window.addEventListener('deviceorientation', onOrientation);
+            })
+            .catch(() => {});
+        } else {
+          window.addEventListener('deviceorientation', onOrientation);
+        }
+      }
+      // Try silently on load (desktop / Android), and again on first gesture
+      enableGyro();
 
       /* ============================================================
          SFX — WebAudio-generated tones (no asset files needed)
@@ -1444,36 +1513,10 @@
         osc.start(t0);
         osc.stop(t0 + dur + 0.02);
       }
-      let buzzNodes = null;
-      function startBuzz() {
-        const ctx = ensureAudio();
-        if (!ctx || buzzNodes) return;
-        const osc = ctx.createOscillator();
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        const g = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.value = 180;
-        lfo.frequency.value = 22;
-        lfoGain.gain.value = 25;
-        lfo.connect(lfoGain).connect(osc.frequency);
-        g.gain.setValueAtTime(0.0001, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.25);
-        osc.connect(g).connect(ctx.destination);
-        osc.start(); lfo.start();
-        buzzNodes = { osc, lfo, g };
-      }
-      function stopBuzz() {
-        if (!buzzNodes) return;
-        const ctx = ensureAudio();
-        const { osc, lfo, g } = buzzNodes;
-        try {
-          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
-          osc.stop(ctx.currentTime + 0.3);
-          lfo.stop(ctx.currentTime + 0.3);
-        } catch (_) {}
-        buzzNodes = null;
-      }
+      // (Sustained buzz removed — was glitchy on iOS. Bees use a short
+      // "pop" cue when they appear instead.)
+      function startBuzz() { /* no-op */ }
+      function stopBuzz()  { /* no-op */ }
       function sfx(name) {
         switch (name) {
           case 'click':   return tone({ freq: 520, dur: 0.08, type: 'triangle', gain: 0.12, sweep: -120 });
@@ -1519,6 +1562,8 @@
          ============================================================ */
       document.getElementById('start-btn').addEventListener('click', () => {
         haptic([60]);
+        enableGyro();        // user gesture → satisfies iOS permission prompt
+        ensureAudio();
         goTo('permission');
       });
 
@@ -1561,20 +1606,22 @@
       function spawnSwarm() {
         if (swarmSpawned) return;
         swarmSpawned = true;
-        startBuzz();
         sfx('pop');
 
-        // 5 regular bees with varied scale + flight params + 1 gold bee
+        // Bees are children of the camera (see <a-camera>). All positions
+        // below are CAMERA-RELATIVE: +X right, +Y up, -Z forward. centerZ
+        // of -1.5 means ~1.5m in front of the user.
         const configs = [
-          { scale: 0.20, gold: false, ampX: 1.1, ampY: 0.6, ampZ: 0.3, speedX: 0.55, speedY: 0.7, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerZ: -1.7 },
-          { scale: 0.14, gold: false, ampX: 0.8, ampY: 0.5, ampZ: 0.25,speedX: 0.85, speedY: 1.0, speedZ: 0.5,  phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerZ: -1.4 },
-          { scale: 0.10, gold: false, ampX: 1.3, ampY: 0.7, ampZ: 0.35,speedX: 1.1,  speedY: 0.55,speedZ: 0.7,  phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerZ: -1.9 },
-          { scale: 0.17, gold: false, ampX: 0.7, ampY: 0.45,ampZ: 0.22,speedX: 0.45, speedY: 0.9, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerZ: -1.3 },
-          { scale: 0.12, gold: false, ampX: 1.0, ampY: 0.65,ampZ: 0.3, speedX: 0.75, speedY: 0.6, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerZ: -1.6 },
-          // GOLD bee — slightly larger, more central
-          { scale: 0.22, gold: true,  ampX: 0.9, ampY: 0.5, ampZ: 0.3, speedX: 0.5,  speedY: 0.7, speedZ: 0.4,  phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerZ: -1.5 },
+          { scale: 0.16, gold: false, ampX: 0.65, ampY: 0.35, ampZ: 0.18, speedX: 0.55, speedY: 0.70, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerY: 0.05, centerZ: -1.5 },
+          { scale: 0.12, gold: false, ampX: 0.55, ampY: 0.30, ampZ: 0.15, speedX: 0.85, speedY: 1.00, speedZ: 0.50, phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerY: 0.15, centerZ: -1.3 },
+          { scale: 0.09, gold: false, ampX: 0.80, ampY: 0.45, ampZ: 0.20, speedX: 1.10, speedY: 0.55, speedZ: 0.70, phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerY:-0.05, centerZ: -1.8 },
+          { scale: 0.14, gold: false, ampX: 0.45, ampY: 0.28, ampZ: 0.15, speedX: 0.45, speedY: 0.90, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerY: 0.10, centerZ: -1.2 },
+          { scale: 0.10, gold: false, ampX: 0.70, ampY: 0.40, ampZ: 0.20, speedX: 0.75, speedY: 0.60, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerY:-0.10, centerZ: -1.6 },
+          // GOLD bee — bigger, slightly centered so it's hard to miss
+          { scale: 0.20, gold: true,  ampX: 0.55, ampY: 0.30, ampZ: 0.18, speedX: 0.50, speedY: 0.70, speedZ: 0.40, phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerY: 0.00, centerZ: -1.4 },
         ];
-        configs.forEach((c) => {
+        console.log('[bees] spawning', configs.length);
+        configs.forEach((c, i) => {
           const el = document.createElement('a-entity');
           el.setAttribute('gltf-model', '#bee-model');
           el.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
@@ -1583,9 +1630,11 @@
             `ampX: ${c.ampX}; ampY: ${c.ampY}; ampZ: ${c.ampZ}; ` +
             `speedX: ${c.speedX}; speedY: ${c.speedY}; speedZ: ${c.speedZ}; ` +
             `phaseX: ${c.phaseX}; phaseY: ${c.phaseY}; phaseZ: ${c.phaseZ}; ` +
-            `centerZ: ${c.centerZ}`
+            `centerY: ${c.centerY}; centerZ: ${c.centerZ}`
           );
           el.classList.add('bee-clickable');
+          el.addEventListener('model-loaded', () => console.log('[bees] model-loaded', i, c.gold ? '(GOLD)' : ''));
+          el.addEventListener('model-error',  (e) => console.warn('[bees] model-error', i, e.detail));
           if (c.gold) {
             el.setAttribute('gold-tint', '');
             el.id = 'bee-gold';
@@ -1594,8 +1643,7 @@
           beeSwarm.appendChild(el);
         });
 
-        // Fallback: even without the raycaster catching the gold bee,
-        // tapping the on-screen "Continue" advances after a few seconds.
+        // Fallback "Continue" so the user is never stuck on this screen.
         setTimeout(() => {
           const cta = document.getElementById('bee-cta');
           if (state === 'bee') cta.hidden = false;
@@ -1666,21 +1714,11 @@
          Falls back to profile country if denied / unavailable.
          ============================================================ */
       function latLngToPercent(lat, lng) {
-        // The world-map.png is a stylised non-rectangular layout. These
-        // calibration values tune a linear projection to roughly land on
-        // the painted continents.
-        // Image samples (approx, eyeballed on the painted PNG):
-        //   Spain (40°N, -4°E)   ~ ( 46%, 42% )
-        //   Argentina (-35°, -65°) ~ ( 33%, 65% )
-        //   Japan (36°N, 138°E)   ~ ( 88%, 35% )
-        //   Australia (-25°, 134°E) ~ ( 82%, 78% )
-        //   USA (38°N, -100°W)    ~ ( 22%, 28% )
-        // Linear fit: x = 50 + lng * 0.28,  y = 45 - lat * 0.55
-        const x = 50 + lng * 0.28;
-        const y = 45 - lat * 0.55;
+        // Same calibration as latLngToPct above (assets/world-map.png).
+        const p = latLngToPct(lat, lng);
         return {
-          x: Math.max(2, Math.min(98, x)),
-          y: Math.max(4, Math.min(94, y)),
+          x: Math.max(2, Math.min(98, p.x)),
+          y: Math.max(2, Math.min(98, p.y)),
         };
       }
       function requestGeolocation(profile) {
@@ -1709,45 +1747,64 @@
          map image (assets/world-map.png) is a stylised non-Mercator
          layout — coords below were eyeballed against it.
          ============================================================ */
-      const COUNTRY_COORDS = {
-        NL: { x: 50, y: 37, label: 'NETHERLANDS' },
-        ES: { x: 46, y: 42, label: 'SPAIN' },
-        PT: { x: 43, y: 42, label: 'PORTUGAL' },
-        FR: { x: 49, y: 40, label: 'FRANCE' },
-        DE: { x: 52, y: 38, label: 'GERMANY' },
-        IT: { x: 53, y: 42, label: 'ITALY' },
-        GB: { x: 46, y: 36, label: 'UK' },
-        IE: { x: 44, y: 36, label: 'IRELAND' },
-        BE: { x: 50, y: 39, label: 'BELGIUM' },
-        US: { x: 24, y: 25, label: 'USA' },
-        MX: { x: 22, y: 32, label: 'MEXICO' },
-        AR: { x: 33, y: 65, label: 'ARGENTINA' },
-        BR: { x: 38, y: 55, label: 'BRAZIL' },
-        JP: { x: 88, y: 35, label: 'JAPAN' },
-        AU: { x: 82, y: 78, label: 'AUSTRALIA' },
+      // Calibration for assets/world-map.png (equirectangular, 7001×4001,
+      // with ~8% padding L/R and ~13% top, ~15% bottom).
+      // x_pct = 8 + (lng + 180) * 0.2417
+      // y_pct = 13 + (85 - lat) * 0.4966
+      function latLngToPct(lat, lng) {
+        const x = 8 + (lng + 180) * 0.2417;
+        const y = 13 + (85 - lat) * 0.4966;
+        return { x, y };
+      }
+      const COUNTRIES_LL = {
+        NL: { lat: 52.1, lng:  5.3,  label: 'NETHERLANDS' },
+        ES: { lat: 40.4, lng: -3.7,  label: 'SPAIN' },
+        PT: { lat: 39.4, lng: -8.0,  label: 'PORTUGAL' },
+        FR: { lat: 46.6, lng:  2.2,  label: 'FRANCE' },
+        DE: { lat: 51.2, lng: 10.5,  label: 'GERMANY' },
+        IT: { lat: 41.9, lng: 12.6,  label: 'ITALY' },
+        GB: { lat: 54.5, lng: -2.5,  label: 'UK' },
+        IE: { lat: 53.4, lng: -8.0,  label: 'IRELAND' },
+        BE: { lat: 50.5, lng:  4.5,  label: 'BELGIUM' },
+        US: { lat: 38.0, lng: -97.0, label: 'USA' },
+        MX: { lat: 23.6, lng: -102.5,label: 'MEXICO' },
+        AR: { lat: -34.6,lng: -58.4, label: 'ARGENTINA' },
+        BR: { lat: -14.2,lng: -51.9, label: 'BRAZIL' },
+        JP: { lat: 36.2, lng: 138.3, label: 'JAPAN' },
+        AU: { lat: -25.3,lng: 134.5, label: 'AUSTRALIA' },
       };
+      const COUNTRY_COORDS = Object.fromEntries(
+        Object.entries(COUNTRIES_LL).map(([cc, info]) => {
+          const p = latLngToPct(info.lat, info.lng);
+          return [cc, { x: p.x, y: p.y, label: info.label }];
+        })
+      );
 
-      const SEED_TRACES = [
+      const _SEEDS = [
         // Unlocked (orange / ALBA)
         { id: 's1', quote: 'This beer really reminds me of hot summers spent with my family',
-          icon: '🍊', who: 'MARIA, SPAIN', x: 46, y: 42 },
+          icon: '🍊', who: 'MARIA, SPAIN',       cc: 'ES' },
         { id: 's2', quote: 'Perfect after a long shift — tastes like the coast.',
-          icon: '🍊', who: 'JOÃO, PORTUGAL', x: 43, y: 42 },
+          icon: '🍊', who: 'JOÃO, PORTUGAL',     cc: 'PT' },
         { id: 's3', quote: 'Bringing a 6-pack to the rooftop tonight.',
-          icon: '🍊', who: 'EMMA, NETHERLANDS', x: 50, y: 37 },
+          icon: '🍊', who: 'EMMA, NETHERLANDS',  cc: 'NL' },
         { id: 's4', quote: 'I drank one in the Andes and watched the sun fall.',
-          icon: '🍊', who: 'LUCAS, ARGENTINA', x: 33, y: 65 },
+          icon: '🍊', who: 'LUCAS, ARGENTINA',   cc: 'AR' },
         { id: 's5', quote: 'Tastes like the orchards back home.',
-          icon: '🍊', who: 'AKIRA, JAPAN', x: 88, y: 35 },
+          icon: '🍊', who: 'AKIRA, JAPAN',       cc: 'JP' },
         { id: 's6', quote: 'Reminds me of road trips through the desert.',
-          icon: '🍊', who: 'SOFIA, MEXICO', x: 22, y: 32 },
-        // Locked (other flavors — not the unlocked ALBA orange wheat)
-        { id: 'l1', quote: '', icon: '🍒', who: 'LOCKED', x: 53, y: 42 },
-        { id: 'l2', quote: '', icon: '🍒', who: 'LOCKED', x: 24, y: 25 },
-        { id: 'l3', quote: '', icon: '🍒', who: 'LOCKED', x: 82, y: 78 },
-        { id: 'l4', quote: '', icon: '🍒', who: 'LOCKED', x: 62, y: 50 },
-        { id: 'l5', quote: '', icon: '🍒', who: 'LOCKED', x: 72, y: 60 },
+          icon: '🍊', who: 'SOFIA, MEXICO',      cc: 'MX' },
+        // Locked (other flavors)
+        { id: 'l1', quote: '', icon: '🍒', who: 'LOCKED', cc: 'IT', jx: 1 },
+        { id: 'l2', quote: '', icon: '🍒', who: 'LOCKED', cc: 'US', jx: 2, jy: -2 },
+        { id: 'l3', quote: '', icon: '🍒', who: 'LOCKED', cc: 'AU' },
+        { id: 'l4', quote: '', icon: '🍒', who: 'LOCKED', cc: 'BR', jy: 2 },
+        { id: 'l5', quote: '', icon: '🍒', who: 'LOCKED', cc: 'DE', jx: -2 },
       ];
+      const SEED_TRACES = _SEEDS.map((s) => {
+        const c = COUNTRY_COORDS[s.cc] || { x: 50, y: 50 };
+        return { ...s, x: c.x + (s.jx || 0), y: c.y + (s.jy || 0) };
+      });
 
       function getTraces() {
         try {
@@ -1802,16 +1859,16 @@
           tracesLayer.appendChild(pin);
         });
 
-        // "You are here" pin
-        const wrap = document.getElementById('map-wrap');
-        const oldHere = wrap.querySelector('.here-pin');
+        // "You are here" pin (inside map-stage so it follows image coords)
+        const stage = document.getElementById('map-stage');
+        const oldHere = stage.querySelector('.here-pin');
         if (oldHere) oldHere.remove();
         if (myCoord) {
           const here = document.createElement('div');
           here.className = 'here-pin';
           here.style.left = myCoord.x + '%';
           here.style.top  = myCoord.y + '%';
-          wrap.appendChild(here);
+          stage.appendChild(here);
         }
       }
 
@@ -1924,7 +1981,10 @@
       document.getElementById('community-join').addEventListener('click', () => {
         haptic([40, 30, 80]);
         sfx('success');
-        closeCommunity();
+        // Brief pause so the haptic/sfx land before navigation
+        setTimeout(() => {
+          window.location.href = 'https://www.cerveceriadezarra.es/';
+        }, 200);
       });
 
       document.getElementById('map-back').addEventListener('click', () => {
