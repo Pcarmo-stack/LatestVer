@@ -132,7 +132,6 @@
         background-position: center top;
         filter: brightness(0.85) saturate(1.05);
         z-index: 0;
-        pointer-events: none;
         will-change: transform;
         transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
       }
@@ -407,8 +406,28 @@
         background: transparent;
         pointer-events: none;
         justify-content: flex-end;
-        /* overlay sits above the A-Frame canvas */
         z-index: 10;
+      }
+
+      /* HTML bee sprites — sit above the A-Frame canvas, guaranteed visible */
+      .bee-sprite {
+        position: fixed;
+        pointer-events: auto;
+        cursor: pointer;
+        user-select: none;
+        line-height: 1;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+        will-change: transform, left, top;
+        z-index: 11;
+      }
+      .bee-sprite.gold {
+        filter: drop-shadow(0 0 8px rgba(255,200,0,0.95))
+                drop-shadow(0 0 18px rgba(255,160,0,0.7));
+        animation: gold-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes gold-pulse {
+        0%, 100% { filter: drop-shadow(0 0 8px rgba(255,200,0,0.9)) drop-shadow(0 0 18px rgba(255,160,0,0.6)); }
+        50%      { filter: drop-shadow(0 0 14px rgba(255,220,0,1.0)) drop-shadow(0 0 30px rgba(255,180,0,0.95)); }
       }
       .bee-msg {
         pointer-events: none;
@@ -444,28 +463,6 @@
         transform: translateY(0);
       }
       .bee-cta:active { transform: scale(0.97); }
-
-      /* HTML bee sprites — rendered in the overlay, always above camera */
-      .bee-sprite {
-        position: fixed;
-        pointer-events: auto;
-        cursor: pointer;
-        user-select: none;
-        line-height: 1;
-        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
-        will-change: transform;
-        z-index: 11;
-        transition: filter 0.2s;
-      }
-      .bee-sprite.gold {
-        filter: drop-shadow(0 0 10px rgba(255, 200, 0, 0.9))
-                drop-shadow(0 0 22px rgba(255, 160, 0, 0.6));
-        animation: gold-pulse 1.2s ease-in-out infinite;
-      }
-      @keyframes gold-pulse {
-        0%, 100% { filter: drop-shadow(0 0 10px rgba(255,200,0,0.9)) drop-shadow(0 0 22px rgba(255,160,0,0.6)); }
-        50%       { filter: drop-shadow(0 0 18px rgba(255,220,0,1.0)) drop-shadow(0 0 36px rgba(255,180,0,0.9)); }
-      }
 
       /* ==========================================================
          STATE 5 · PROFILE
@@ -611,17 +608,13 @@
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
-        width: 100%;
-        max-width: calc((100% - 0px) * 1);
+        /* Fill the screen by anchoring to height + enforced aspect ratio.
+           Overflows horizontally on portrait phones; .map-wrap clips it.
+           Pin % coords stay accurate because the stage keeps its aspect. */
+        height: 100%;
         aspect-ratio: 1.75 / 1;
+        min-width: 100%;
         background: transparent;
-      }
-      /* Make stage fill whichever dimension is the limiting one */
-      @media (orientation: portrait) {
-        .map-stage { width: 100%; height: auto; }
-      }
-      @media (orientation: landscape) {
-        .map-stage { width: auto; height: 100%; }
       }
       .map-img {
         position: absolute;
@@ -1256,84 +1249,6 @@
 
     <script>
       /* ============================================================
-         HTML BEE SWARM — sprites rendered in the screen overlay,
-         always above the A-Frame camera feed. Lissajous paths in
-         screen-% coordinates, animated with requestAnimationFrame.
-         ============================================================ */
-      let beeSprites = [];
-      let beeAnimFrame = null;
-
-      function spawnSwarm() {
-        if (swarmSpawned) return;
-        swarmSpawned = true;
-        sfx(‘pop’);
-
-        const W = window.innerWidth;
-        const H = window.innerHeight;
-
-        // Each config: cx/cy = centre (0–1 of screen), ax/ay = amplitude
-        // (fraction of screen), sx/sy = angular speed (rad/s), phase offset,
-        // size in px, gold flag.
-        const configs = [
-          { cx:.50, cy:.42, ax:.38, ay:.22, sx:.55, sy:.70, px:0.0, py:1.2, size:52, gold:false },
-          { cx:.48, cy:.38, ax:.30, ay:.18, sx:.85, sy:1.00, px:1.4, py:0.3, size:38, gold:false },
-          { cx:.52, cy:.50, ax:.42, ay:.25, sx:1.10, sy:.55, px:2.5, py:1.8, size:30, gold:false },
-          { cx:.46, cy:.44, ax:.28, ay:.16, sx:.45, sy:.90, px:3.2, py:2.4, size:44, gold:false },
-          { cx:.54, cy:.40, ax:.35, ay:.20, sx:.75, sy:.60, px:0.7, py:3.0, size:34, gold:false },
-          // GOLD — bigger, centred, hard to miss
-          { cx:.50, cy:.44, ax:.32, ay:.19, sx:.50, sy:.70, px:1.0, py:0.0, size:64, gold:true  },
-        ];
-
-        configs.forEach((c, i) => {
-          const el = document.createElement(‘div’);
-          el.className = ‘bee-sprite’ + (c.gold ? ‘ gold’ : ‘’);
-          el.textContent = c.gold ? ‘🐝’ : ‘🐝’;
-          el.style.fontSize = c.size + ‘px’;
-          // Start at centre
-          el.style.left = (c.cx * W - c.size / 2) + ‘px’;
-          el.style.top  = (c.cy * H - c.size / 2) + ‘px’;
-          if (c.gold) {
-            el.style.fontSize = c.size + ‘px’;
-            el.title = ‘Tap me!’;
-            el.addEventListener(‘click’, onGoldBeeClicked);
-            el.addEventListener(‘touchend’, onGoldBeeClicked, { passive: false });
-          }
-          document.body.appendChild(el);
-
-          const t0 = Math.random() * 8;
-          beeSprites.push({ el, c, t: t0, W, H, prevX: 0 });
-        });
-
-        // Animation loop
-        let last = performance.now();
-        function tick(now) {
-          const dt = Math.min((now - last) / 1000, 0.05);
-          last = now;
-          beeSprites.forEach((b) => {
-            b.t += dt;
-            const { c, W, H } = b;
-            const x = c.cx * W + Math.sin(b.t * c.sx + c.px) * c.ax * W;
-            const y = c.cy * H + Math.sin(b.t * c.sy + c.py) * c.ay * H;
-            // Flip horizontally based on direction of travel
-            const dx = x - b.prevX;
-            const flip = dx < 0 ? ‘scaleX(-1)’ : ‘’;
-            b.el.style.transform = flip;
-            b.el.style.left = (x - b.c.size / 2) + ‘px’;
-            b.el.style.top  = (y - b.c.size / 2) + ‘px’;
-            b.prevX = x;
-          });
-          beeAnimFrame = requestAnimationFrame(tick);
-        }
-        beeAnimFrame = requestAnimationFrame(tick);
-
-        // Fallback Continue button after 5s
-        setTimeout(() => {
-          const cta = document.getElementById(‘bee-cta’);
-          if (state === ‘bee’) cta.hidden = false;
-        }, 5000);
-      }
-
-      /* ============================================================
          STATE
          ============================================================ */
       const STATES = ['intro', 'permission', 'scan', 'bee', 'profile', 'map'];
@@ -1440,17 +1355,14 @@
       applyLang();
 
       /* ============================================================
-         PARALLAX — device tilt (gyro) + touch + pointer + ambient sway.
-         Works on desktop (mouse), mobile (touch), and gyro-capable
-         devices. iOS 13+ requires explicit permission, requested when
-         the user taps Start.
+         PARALLAX — gyroscope ONLY (tilt the phone to move).
+         Logo stays still. Background + mist drift smoothly.
+         iOS 13+ requires explicit permission, requested on first tap.
          ============================================================ */
       const introBg   = document.getElementById('intro-bg');
       const introMist = document.getElementById('intro-mist');
-      const introLogo = document.getElementById('intro-logo');
       let parallaxTarget = { x: 0, y: 0 };
       let parallaxCurrent = { x: 0, y: 0 };
-      let parallaxIdleT = 0;
 
       function setParallaxTarget(nx, ny) {
         parallaxTarget.x = Math.max(-1, Math.min(1, nx));
@@ -1458,50 +1370,27 @@
       }
 
       function tickParallax() {
-        // Idle sway so the intro feels alive even without input
-        parallaxIdleT += 0.012;
-        const idleX = Math.sin(parallaxIdleT) * 0.25;
-        const idleY = Math.cos(parallaxIdleT * 0.7) * 0.18;
-        const tx = parallaxTarget.x || idleX;
-        const ty = parallaxTarget.y || idleY;
-        // Ease toward target
-        parallaxCurrent.x += (tx - parallaxCurrent.x) * 0.08;
-        parallaxCurrent.y += (ty - parallaxCurrent.y) * 0.08;
+        // Smooth easing toward gyro target (slower lerp = smoother glide)
+        parallaxCurrent.x += (parallaxTarget.x - parallaxCurrent.x) * 0.06;
+        parallaxCurrent.y += (parallaxTarget.y - parallaxCurrent.y) * 0.06;
         const nx = parallaxCurrent.x;
         const ny = parallaxCurrent.y;
         if (introBg) {
-          introBg.style.transform   = `translate3d(${nx * -18}px, ${ny * -14}px, 0) scale(1.08)`;
-          introMist.style.transform = `translate3d(${nx * -32}px, ${ny * -22}px, 0)`;
-          introLogo.style.transform = `translate3d(${nx * 12}px, ${ny * 8}px, 0)`;
+          introBg.style.transform   = `translate3d(${nx * -22}px, ${ny * -16}px, 0) scale(1.08)`;
+          introMist.style.transform = `translate3d(${nx * -36}px, ${ny * -24}px, 0)`;
         }
         requestAnimationFrame(tickParallax);
       }
       requestAnimationFrame(tickParallax);
 
-      function pointerToTarget(clientX, clientY) {
-        const nx = (clientX / window.innerWidth)  * 2 - 1;
-        const ny = (clientY / window.innerHeight) * 2 - 1;
-        setParallaxTarget(nx, ny);
-      }
-      window.addEventListener('mousemove', (e) => {
-        if (state !== 'intro') return;
-        pointerToTarget(e.clientX, e.clientY);
-      });
-      window.addEventListener('touchmove', (e) => {
-        if (state !== 'intro') return;
-        const t = e.touches[0];
-        if (!t) return;
-        pointerToTarget(t.clientX, t.clientY);
-      }, { passive: true });
-
       function onOrientation(e) {
         if (state !== 'intro') return;
+        // gamma = left/right tilt (-90..90), beta = front/back tilt (-180..180)
         const nx = (e.gamma || 0) / 30;
-        const ny = (e.beta  || 0) / 45;
+        const ny = ((e.beta || 0) - 45) / 45; // center around 45° (natural hold angle)
         setParallaxTarget(nx, ny);
       }
       function enableGyro() {
-        // iOS 13+ requires explicit permission
         const DO = window.DeviceOrientationEvent;
         if (DO && typeof DO.requestPermission === 'function') {
           DO.requestPermission()
@@ -1509,11 +1398,11 @@
               if (res === 'granted') window.addEventListener('deviceorientation', onOrientation);
             })
             .catch(() => {});
-        } else {
+        } else if (DO) {
           window.addEventListener('deviceorientation', onOrientation);
         }
       }
-      // Try silently on load (desktop / Android), and again on first gesture
+      // Silent attempt at load (Android / non-iOS), retry on first user gesture
       enableGyro();
 
       /* ============================================================
@@ -1527,41 +1416,49 @@
         } catch (_) { audioCtx = null; }
         return audioCtx;
       }
-      function tone({ freq = 440, dur = 0.18, type = 'sine', gain = 0.18, sweep = 0, attack = 0.01 } = {}) {
+      // Shared master gain — lets us tame overall volume in one place
+      let masterGain = null;
+      function tone({ freq = 440, dur = 0.22, type = 'sine', gain = 0.12, sweep = 0, attack = 0.018, release = null } = {}) {
         const ctx = ensureAudio();
         if (!ctx) return;
+        if (!masterGain) {
+          masterGain = ctx.createGain();
+          masterGain.gain.value = 0.75;
+          masterGain.connect(ctx.destination);
+        }
         const t0 = ctx.currentTime;
+        const rel = release == null ? Math.max(0.05, dur * 0.6) : release;
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(freq, t0);
         if (sweep) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + sweep), t0 + dur);
         g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+        // Smooth attack → sustain → exponential release (no clicks/pops)
+        g.gain.linearRampToValueAtTime(gain, t0 + attack);
+        g.gain.setValueAtTime(gain, t0 + dur - rel);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        osc.connect(g).connect(ctx.destination);
+        osc.connect(g).connect(masterGain);
         osc.start(t0);
-        osc.stop(t0 + dur + 0.02);
+        osc.stop(t0 + dur + 0.03);
       }
-      // (Sustained buzz removed — was glitchy on iOS. Bees use a short
-      // "pop" cue when they appear instead.)
       function startBuzz() { /* no-op */ }
       function stopBuzz()  { /* no-op */ }
       function sfx(name) {
         switch (name) {
-          case 'click':   return tone({ freq: 520, dur: 0.08, type: 'triangle', gain: 0.12, sweep: -120 });
-          case 'success': tone({ freq: 660, dur: 0.12, type: 'sine', gain: 0.18 });
-                          setTimeout(() => tone({ freq: 880, dur: 0.18, type: 'sine', gain: 0.18 }), 110);
+          case 'click':   return tone({ freq: 620, dur: 0.10, type: 'sine', gain: 0.08, attack: 0.012 });
+          case 'success': tone({ freq: 587.33, dur: 0.18, type: 'sine', gain: 0.10 }); // D5
+                          setTimeout(() => tone({ freq: 783.99, dur: 0.26, type: 'sine', gain: 0.10 }), 130); // G5
                           return;
-          case 'gold':    tone({ freq: 880, dur: 0.10, type: 'triangle', gain: 0.2 });
-                          setTimeout(() => tone({ freq: 1175, dur: 0.10, type: 'triangle', gain: 0.2 }), 80);
-                          setTimeout(() => tone({ freq: 1480, dur: 0.20, type: 'triangle', gain: 0.2 }), 160);
+          case 'gold':    tone({ freq: 783.99, dur: 0.16, type: 'sine', gain: 0.11 });  // G5
+                          setTimeout(() => tone({ freq: 987.77, dur: 0.16, type: 'sine', gain: 0.11 }), 110); // B5
+                          setTimeout(() => tone({ freq: 1174.66, dur: 0.32, type: 'sine', gain: 0.11 }), 220); // D6
                           return;
-          case 'send':    return tone({ freq: 740, dur: 0.20, type: 'sine', gain: 0.18, sweep: 200 });
-          case 'pop':     return tone({ freq: 320, dur: 0.10, type: 'square', gain: 0.10, sweep: 240 });
+          case 'send':    return tone({ freq: 660, dur: 0.26, type: 'sine', gain: 0.10, sweep: 180 });
+          case 'pop':     return tone({ freq: 440, dur: 0.14, type: 'sine', gain: 0.09, sweep: 160 });
         }
       }
-      // Wire generic button clicks for a soft "click" sound
+      // Soft "click" sound on any UI button — no ReferenceError
       document.addEventListener('click', (e) => {
         if (e.target.closest('button, .intro-cta, .trace-pin, .flavor-chip')) {
           sfx('click');
@@ -1627,11 +1524,78 @@
         }
       });
 
+      /* HTML sprite swarm — guaranteed on top of the camera feed.
+         Lissajous paths in screen-fraction coordinates. */
+      let beeSprites = [];
+      let beeAnimFrame = null;
+
       function clearSwarm() {
         swarmSpawned = false;
         if (beeAnimFrame) { cancelAnimationFrame(beeAnimFrame); beeAnimFrame = null; }
         beeSprites.forEach((b) => b.el.remove());
         beeSprites = [];
+      }
+
+      function spawnSwarm() {
+        if (swarmSpawned) return;
+        swarmSpawned = true;
+        sfx('pop');
+
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+
+        // Each bee: cx/cy = orbit centre (fraction of screen), ax/ay = amplitude,
+        // sx/sy = angular speed (rad/s), px/py = phase, size in px, gold flag.
+        const configs = [
+          { cx:.50, cy:.46, ax:.34, ay:.22, sx:.55, sy:.70, px:0.0, py:1.2, size:30, gold:false },
+          { cx:.48, cy:.40, ax:.28, ay:.18, sx:.85, sy:1.00, px:1.4, py:0.3, size:24, gold:false },
+          { cx:.52, cy:.52, ax:.40, ay:.26, sx:1.10, sy:.55, px:2.5, py:1.8, size:20, gold:false },
+          { cx:.46, cy:.48, ax:.26, ay:.16, sx:.45, sy:.90, px:3.2, py:2.4, size:28, gold:false },
+          { cx:.54, cy:.44, ax:.32, ay:.20, sx:.75, sy:.60, px:0.7, py:3.0, size:22, gold:false },
+          // GOLD — slightly larger + glowing
+          { cx:.50, cy:.48, ax:.30, ay:.19, sx:.50, sy:.70, px:1.0, py:0.0, size:42, gold:true  },
+        ];
+
+        configs.forEach((c) => {
+          const el = document.createElement('div');
+          el.className = 'bee-sprite' + (c.gold ? ' gold' : '');
+          el.textContent = '🐝';
+          el.style.fontSize = c.size + 'px';
+          el.style.left = (c.cx * W - c.size / 2) + 'px';
+          el.style.top  = (c.cy * H - c.size / 2) + 'px';
+          if (c.gold) {
+            el.addEventListener('click', onGoldBeeClicked);
+            el.addEventListener('touchend', onGoldBeeClicked, { passive: false });
+          }
+          document.body.appendChild(el);
+          beeSprites.push({ el, c, t: Math.random() * 8, prevX: 0 });
+        });
+
+        // Smooth RAF loop — Lissajous orbits in screen-pixel space
+        let last = performance.now();
+        function tick(now) {
+          const dt = Math.min((now - last) / 1000, 0.05);
+          last = now;
+          const w = window.innerWidth, h = window.innerHeight;
+          beeSprites.forEach((b) => {
+            b.t += dt;
+            const x = b.c.cx * w + Math.sin(b.t * b.c.sx + b.c.px) * b.c.ax * w;
+            const y = b.c.cy * h + Math.sin(b.t * b.c.sy + b.c.py) * b.c.ay * h;
+            const flip = (x - b.prevX) < 0 ? 'scaleX(-1)' : '';
+            b.el.style.transform = flip;
+            b.el.style.left = (x - b.c.size / 2) + 'px';
+            b.el.style.top  = (y - b.c.size / 2) + 'px';
+            b.prevX = x;
+          });
+          beeAnimFrame = requestAnimationFrame(tick);
+        }
+        beeAnimFrame = requestAnimationFrame(tick);
+
+        // Fallback Continue so the user is never stuck.
+        setTimeout(() => {
+          const cta = document.getElementById('bee-cta');
+          if (state === 'bee') cta.hidden = false;
+        }, 4500);
       }
 
       async function onGoldBeeClicked(e) {
