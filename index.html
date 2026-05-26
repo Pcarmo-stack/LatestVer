@@ -14,8 +14,7 @@
 
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    <!-- GLTFLoader exposed on global THREE for the bee overlay renderer -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.5.4/dist/aframe-extras.min.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -91,20 +90,6 @@
         height: 100% !important;
         display: block !important;
       }
-      /* Bee overlay — raw Three.js canvas, floats above camera feed */
-      #bee-canvas {
-        position: fixed !important;
-        inset: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        z-index: 11;
-        pointer-events: none;
-        display: none;
-      }
-      #bee-canvas.bees-active {
-        display: block;
-        pointer-events: auto;
-      }
       .a-enter-vr, .a-enter-ar,
       .a-enter-vr-button, .a-enter-ar-button { display: none !important; }
 
@@ -149,6 +134,7 @@
         filter: brightness(0.85) saturate(1.05);
         z-index: 0;
         will-change: transform;
+        pointer-events: none;
         transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
       }
       .intro-bg::after {
@@ -1054,13 +1040,7 @@
   <body data-state="intro">
 
     <!-- ============================================================
-         BEE OVERLAY — raw Three.js canvas, always above camera feed.
-         Initialised lazily on first spawnSwarm(); transparent when empty.
-         ============================================================ -->
-    <canvas id="bee-canvas"></canvas>
-
-    <!-- ============================================================
-         AR SCENE  ·  camera feed + image target detection
+         AR SCENE  ·  camera feed + bee swarm + image target detection
          ============================================================ -->
     <a-scene
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
@@ -1070,8 +1050,24 @@
       device-orientation-permission-ui="enabled: false"
       embedded
     >
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-      <!-- Marker target used purely as a trigger; bees are NOT in this scene. -->
+      <a-assets>
+        <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false">
+        <!-- Bee swarm: entities are added/removed by spawnSwarm()/clearSwarm() -->
+        <a-entity id="bee-swarm"></a-entity>
+        <!-- Cursor raycasts against .bee entities; enabled only in bee state -->
+        <a-entity
+          id="ar-cursor"
+          cursor="fuse: false; rayOrigin: mouse"
+          raycaster="objects: .bee; far: 5; enabled: false">
+        </a-entity>
+      </a-camera>
+
+      <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
+      <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
+
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
 
@@ -1267,14 +1263,73 @@
 
     <script>
       /* ============================================================
+         A-FRAME COMPONENTS  (registered before scene initialises)
+         ============================================================ */
+
+      /* free-fly: Lissajous screen-space motion, parented to the camera */
+      AFRAME.registerComponent('free-fly', {
+        schema: {
+          centerX: {type:'number', default:0},
+          centerY: {type:'number', default:0},
+          centerZ: {type:'number', default:-1.3},
+          ampX:    {type:'number', default:0.5},
+          ampY:    {type:'number', default:0.3},
+          ampZ:    {type:'number', default:0.15},
+          speedX:  {type:'number', default:0.6},
+          speedY:  {type:'number', default:0.8},
+          speedZ:  {type:'number', default:0.4},
+          phaseX:  {type:'number', default:0},
+          phaseY:  {type:'number', default:0},
+          phaseZ:  {type:'number', default:0},
+        },
+        init() { this.t = Math.random() * 8; },
+        tick(_, dt) {
+          this.t += dt / 1000;
+          const d = this.data, t = this.t;
+          const x = d.centerX + Math.sin(t * d.speedX + d.phaseX) * d.ampX;
+          const y = d.centerY + Math.sin(t * d.speedY + d.phaseY) * d.ampY;
+          const z = d.centerZ + Math.sin(t * d.speedZ + d.phaseZ) * d.ampZ;
+          const obj = this.el.object3D;
+          const dx = x - obj.position.x, dz = z - obj.position.z;
+          if (Math.abs(dx) > 1e-5 || Math.abs(dz) > 1e-5) {
+            obj.rotation.y = Math.atan2(dx, dz);
+          }
+          obj.position.set(x, y, z);
+        },
+      });
+
+      /* gold-tint: turns every mesh gold AND disables depth-test so it
+         always renders above the MindAR camera background plane.         */
+      AFRAME.registerComponent('gold-tint', {
+        init() {
+          this.el.addEventListener('model-loaded', () => {
+            this.el.object3D.traverse((node) => {
+              if (!node.isMesh) return;
+              const mat = node.material.clone();
+              mat.color = new THREE.Color('#f6c233');
+              if (mat.emissive)               mat.emissive.set('#7a5500');
+              if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.8;
+              if ('metalness' in mat)         mat.metalness  = 0.85;
+              if ('roughness' in mat)         mat.roughness  = 0.25;
+              mat.depthTest = false;
+              mat.needsUpdate = true;
+              node.material = mat;
+              node.renderOrder = 999;
+            });
+          });
+        },
+      });
+
+      /* ============================================================
          STATE
          ============================================================ */
       const STATES = ['intro', 'permission', 'scan', 'bee', 'profile', 'map'];
       let state = 'intro';
       const body = document.body;
-      const scene = document.querySelector('a-scene'); // MindAR scene (only one)
+      const scene = document.querySelector('a-scene');
       const target0 = document.getElementById('target-0');
-      const beeCanvasEl = document.getElementById('bee-canvas');
+      const beeSwarm  = document.getElementById('bee-swarm');
+      const arCursor  = document.getElementById('ar-cursor');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1285,103 +1340,11 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        beeCanvasEl.classList.toggle('bees-active', next === 'bee');
+        // Enable cursor raycasting only when bees are active
+        if (arCursor) arCursor.setAttribute('raycaster', 'enabled', next === 'bee');
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
-
-      /* ============================================================
-         BEE OVERLAY — raw Three.js on a dedicated canvas
-         This canvas sits at z-index 11, above the MindAR camera feed,
-         with a fully transparent background. No A-Frame involved.
-         ============================================================ */
-      let beeRenderer  = null;
-      let beeScene3    = null;
-      let beeCamera3   = null;
-      let beeClock3    = null;
-      let beeObjects   = []; // { root, mixer, t, params, isGold }
-      let beeRafId     = null;
-      let swarmSpawned = false;
-
-      function initBeeRenderer() {
-        if (beeRenderer) return;
-
-        beeRenderer = new THREE.WebGLRenderer({ canvas: beeCanvasEl, alpha: true, antialias: true });
-        beeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        beeRenderer.setSize(window.innerWidth, window.innerHeight);
-        beeRenderer.setClearColor(0x000000, 0);
-
-        beeScene3  = new THREE.Scene();
-        beeClock3  = new THREE.Clock();
-        beeCamera3 = new THREE.PerspectiveCamera(
-          80,
-          window.innerWidth / window.innerHeight,
-          0.01, 100
-        );
-
-        // Lighting matches the original A-Frame lights
-        beeScene3.add(new THREE.AmbientLight(0xffd9a0, 0.95));
-        const dir = new THREE.DirectionalLight(0xfff2c8, 0.6);
-        dir.position.set(0.5, 1, 1);
-        beeScene3.add(dir);
-
-        window.addEventListener('resize', () => {
-          if (!beeRenderer) return;
-          beeRenderer.setSize(window.innerWidth, window.innerHeight);
-          beeCamera3.aspect = window.innerWidth / window.innerHeight;
-          beeCamera3.updateProjectionMatrix();
-        });
-
-        (function renderLoop() {
-          beeRafId = requestAnimationFrame(renderLoop);
-          const dt = beeClock3.getDelta();
-          beeObjects.forEach((b) => {
-            if (b.mixer) b.mixer.update(dt * 1.4);
-            b.t += dt;
-            const p = b.params;
-            const x = p.centerX + Math.sin(b.t * p.speedX + p.phaseX) * p.ampX;
-            const y = p.centerY + Math.sin(b.t * p.speedY + p.phaseY) * p.ampY;
-            const z = p.centerZ + Math.sin(b.t * p.speedZ + p.phaseZ) * p.ampZ;
-            const prev = b.root.position;
-            const dx = x - prev.x, dz = z - prev.z;
-            if (Math.abs(dx) > 1e-5 || Math.abs(dz) > 1e-5) {
-              b.root.rotation.y = Math.atan2(dx, dz);
-            }
-            b.root.position.set(x, y, z);
-          });
-          beeRenderer.setClearColor(0x000000, 0);
-          beeRenderer.render(beeScene3, beeCamera3);
-        })();
-      }
-
-      // Click / tap — raycast to detect gold bee
-      beeCanvasEl.addEventListener('click', (e) => {
-        if (state !== 'bee' || !beeCamera3 || beeObjects.length === 0) return;
-        const rect = beeCanvasEl.getBoundingClientRect();
-        const nx = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
-        const ny = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
-        const ray = new THREE.Raycaster();
-        ray.setFromCamera({ x: nx, y: ny }, beeCamera3);
-        const meshes = [];
-        beeObjects.forEach((b) => b.root.traverse((n) => { if (n.isMesh) meshes.push(n); }));
-        const hits = ray.intersectObjects(meshes, false);
-        if (!hits.length) return;
-        const hitMesh = hits[0].object;
-        const hitBee = beeObjects.find((b) => {
-          let found = false;
-          b.root.traverse((n) => { if (n === hitMesh) found = true; });
-          return found;
-        });
-        if (!hitBee) return;
-        if (hitBee.isGold) { onGoldBeeClicked(); }
-        else { sfx('click'); }
-      });
-      // Forward touch → click so mobile works
-      beeCanvasEl.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        const t = e.changedTouches[0];
-        beeCanvasEl.dispatchEvent(new MouseEvent('click', { clientX: t.clientX, clientY: t.clientY, bubbles: true }));
-      }, { passive: false });
 
       /* ============================================================
          I18N — EN / ES toggle
@@ -1626,10 +1589,12 @@
 
       /* ============================================================
          SCAN → BEE (target detection)
-         The bees are NOT parented to the marker — finding the can
-         simply triggers the swarm to spawn in screen space.
+         Bees float in camera space — finding the can triggers the swarm.
+         renderOrder:999 + depthTest:false makes them always visible above
+         the MindAR camera background plane in the same WebGL context.
          ============================================================ */
       let swarmSpawned = false;
+
       target0.addEventListener('targetFound', () => {
         if (state === 'scan') {
           haptic([80, 60, 140]);
@@ -1640,71 +1605,70 @@
 
       function clearSwarm() {
         swarmSpawned = false;
-        beeObjects.forEach((b) => {
-          if (b.mixer) b.mixer.stopAllAction();
-          if (beeScene3) beeScene3.remove(b.root);
-        });
-        beeObjects = [];
+        document.getElementById('bee-cta').hidden = true;
+        while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
 
       function spawnSwarm() {
         if (swarmSpawned) return;
         swarmSpawned = true;
         sfx('pop');
-        initBeeRenderer(); // no-op if already done
 
-        // Camera-relative: +X right, +Y up, -Z forward
+        // Camera-relative coords: +X right, +Y up, -Z forward
         const configs = [
           { scale:0.045, gold:false, centerX:0, centerY: 0.05, centerZ:-1.4, ampX:0.55, ampY:0.32, ampZ:0.16, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
           { scale:0.035, gold:false, centerX:0, centerY: 0.18, centerZ:-1.2, ampX:0.45, ampY:0.26, ampZ:0.14, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
           { scale:0.025, gold:false, centerX:0, centerY:-0.06, centerZ:-1.6, ampX:0.65, ampY:0.38, ampZ:0.18, speedX:1.10, speedY:0.55, speedZ:0.70, phaseX:2.5, phaseY:1.8, phaseZ:0.1 },
           { scale:0.040, gold:false, centerX:0, centerY: 0.10, centerZ:-1.1, ampX:0.40, ampY:0.24, ampZ:0.14, speedX:0.45, speedY:0.90, speedZ:0.25, phaseX:3.2, phaseY:2.4, phaseZ:1.6 },
           { scale:0.030, gold:false, centerX:0, centerY:-0.12, centerZ:-1.5, ampX:0.58, ampY:0.34, ampZ:0.18, speedX:0.75, speedY:0.60, speedZ:0.55, phaseX:0.7, phaseY:3.0, phaseZ:2.7 },
-          // GOLD — bigger, near centre
+          // GOLD — bigger, centre-screen
           { scale:0.070, gold:true,  centerX:0, centerY: 0.00, centerZ:-1.3, ampX:0.45, ampY:0.26, ampZ:0.16, speedX:0.50, speedY:0.70, speedZ:0.40, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
         ];
 
-        const Loader = THREE.GLTFLoader;
-        if (!Loader) { console.error('GLTFLoader not available'); return; }
-        new Loader().load('./assets/bee.glb', (gltf) => {
-          configs.forEach((c) => {
-            const root = gltf.scene.clone(true);
-            root.scale.setScalar(c.scale);
-            root.position.set(c.centerX, c.centerY, c.centerZ);
+        configs.forEach((c) => {
+          const ent = document.createElement('a-entity');
+          ent.classList.add('bee');
+          ent.setAttribute('gltf-model', '#bee-model');
+          ent.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
+          ent.setAttribute('animation-mixer', '');
+          ent.setAttribute('free-fly',
+            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
+            `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
+            `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
+            `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
+          );
+          if (c.gold) ent.setAttribute('gold-tint', '');
 
-            if (c.gold) {
-              root.traverse((node) => {
-                if (!node.isMesh) return;
-                const mat = node.material.clone();
-                mat.color = new THREE.Color('#f6c233');
-                if (mat.emissive)        mat.emissive.set('#7a5500');
-                if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.8;
-                if ('metalness' in mat)  mat.metalness  = 0.85;
-                if ('roughness' in mat)  mat.roughness  = 0.25;
-                node.material = mat;
-              });
-            }
-
-            let mixer = null;
-            if (gltf.animations && gltf.animations.length) {
-              mixer = new THREE.AnimationMixer(root);
-              gltf.animations.forEach((clip) => mixer.clipAction(clip).play());
-            }
-
-            beeScene3.add(root);
-            beeObjects.push({ root, mixer, t: Math.random() * 8, params: c, isGold: c.gold });
+          // Force bees to render on top of the MindAR camera background
+          ent.addEventListener('model-loaded', () => {
+            ent.object3D.traverse((node) => {
+              if (!node.isMesh) return;
+              node.renderOrder = 999;
+              if (!c.gold) {
+                // gold-tint component handles its own material; only patch regular bees
+                node.material = node.material.clone();
+                node.material.depthTest = false;
+                node.material.needsUpdate = true;
+              }
+            });
           });
-        }, undefined, (err) => console.error('bee.glb load error', err));
 
-        // Fallback continue button
+          if (c.gold) {
+            ent.addEventListener('click', onGoldBeeClicked);
+          } else {
+            ent.addEventListener('click', () => sfx('click'));
+          }
+
+          beeSwarm.appendChild(ent);
+        });
+
+        // Fallback continue button appears after bees have been flying a while
         setTimeout(() => {
-          const cta = document.getElementById('bee-cta');
-          if (state === 'bee') cta.hidden = false;
+          if (state === 'bee') document.getElementById('bee-cta').hidden = false;
         }, 4500);
       }
 
-      async function onGoldBeeClicked(e) {
-        if (e) e.preventDefault();
+      async function onGoldBeeClicked() {
         if (state !== 'bee') return;
         haptic([40, 30, 80]);
         sfx('gold');
