@@ -1612,13 +1612,13 @@
         // below are CAMERA-RELATIVE: +X right, +Y up, -Z forward. centerZ
         // of -1.5 means ~1.5m in front of the user.
         const configs = [
-          { scale: 0.16, gold: false, ampX: 0.65, ampY: 0.35, ampZ: 0.18, speedX: 0.55, speedY: 0.70, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerY: 0.05, centerZ: -1.5 },
-          { scale: 0.12, gold: false, ampX: 0.55, ampY: 0.30, ampZ: 0.15, speedX: 0.85, speedY: 1.00, speedZ: 0.50, phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerY: 0.15, centerZ: -1.3 },
-          { scale: 0.09, gold: false, ampX: 0.80, ampY: 0.45, ampZ: 0.20, speedX: 1.10, speedY: 0.55, speedZ: 0.70, phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerY:-0.05, centerZ: -1.8 },
-          { scale: 0.14, gold: false, ampX: 0.45, ampY: 0.28, ampZ: 0.15, speedX: 0.45, speedY: 0.90, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerY: 0.10, centerZ: -1.2 },
-          { scale: 0.10, gold: false, ampX: 0.70, ampY: 0.40, ampZ: 0.20, speedX: 0.75, speedY: 0.60, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerY:-0.10, centerZ: -1.6 },
-          // GOLD bee — bigger, slightly centered so it's hard to miss
-          { scale: 0.20, gold: true,  ampX: 0.55, ampY: 0.30, ampZ: 0.18, speedX: 0.50, speedY: 0.70, speedZ: 0.40, phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerY: 0.00, centerZ: -1.4 },
+          { scale: 0.045, gold: false, ampX: 0.55, ampY: 0.30, ampZ: 0.15, speedX: 0.55, speedY: 0.70, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerY: 0.05, centerZ: -2.0 },
+          { scale: 0.032, gold: false, ampX: 0.70, ampY: 0.38, ampZ: 0.18, speedX: 0.85, speedY: 1.00, speedZ: 0.50, phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerY: 0.15, centerZ: -2.4 },
+          { scale: 0.025, gold: false, ampX: 0.80, ampY: 0.42, ampZ: 0.20, speedX: 1.10, speedY: 0.55, speedZ: 0.70, phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerY:-0.05, centerZ: -3.0 },
+          { scale: 0.038, gold: false, ampX: 0.45, ampY: 0.25, ampZ: 0.14, speedX: 0.45, speedY: 0.90, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerY: 0.10, centerZ: -2.2 },
+          { scale: 0.028, gold: false, ampX: 0.65, ampY: 0.35, ampZ: 0.18, speedX: 0.75, speedY: 0.60, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerY:-0.10, centerZ: -2.8 },
+          // GOLD bee — slightly bigger, more central, easy to tap
+          { scale: 0.055, gold: true,  ampX: 0.50, ampY: 0.28, ampZ: 0.15, speedX: 0.50, speedY: 0.70, speedZ: 0.40, phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerY: 0.00, centerZ: -2.0 },
         ];
         console.log('[bees] spawning', configs.length);
         configs.forEach((c, i) => {
