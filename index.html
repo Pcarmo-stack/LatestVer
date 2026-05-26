@@ -1563,7 +1563,7 @@
       // Wire generic button clicks for a soft "click" sound
       document.addEventListener('click', (e) => {
         if (e.target.closest('button, .intro-cta, .trace-pin, .flavor-chip')) {
-          if (!buzzNodes) sfx('click');
+          sfx('click');
         }
       }, true);
 
