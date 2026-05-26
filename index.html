@@ -89,6 +89,11 @@
         width: 100% !important;
         height: 100% !important;
         display: block !important;
+        background: transparent !important;
+      }
+      /* Bee overlay canvas must be see-through */
+      #bee-scene canvas {
+        background: transparent !important;
       }
       /* Bee overlay scene — transparent canvas always initialised so A-Frame
          can create a proper WebGL context; visually empty until bees spawn.
@@ -1060,7 +1065,6 @@
       device-orientation-permission-ui="enabled: false"
       renderer="colorManagement: true, antialias: true, alpha: true"
       color-space="sRGB"
-      background="color: transparent"
       transparent-bg
     >
       <a-assets timeout="30000">
