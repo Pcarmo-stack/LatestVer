@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1a1208" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Cervecería de Zarra</title>
+
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Megrim&family=Nunito:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ==========================================================
+         DESIGN TOKENS
+         ========================================================== */
+      :root {
+        --orange:     #E48043;
+        --orange-soft:#F0A06B;
+        --magenta:    #C8438A;
+        --magenta-dk: #A8326F;
+        --cream:      #FBF1DC;
+        --paper:      #FFFCEF;
+        --ink:        #2A1A0E;
+        --ink-soft:   rgba(42, 26, 14, 0.6);
+        --ink-faint:  rgba(42, 26, 14, 0.35);
+        --map-bg:     #B7D6D2;   /* shallow-sea blue-green */
+        --map-land:   #D7B98C;   /* warm sand */
+        --map-land-2: #C9A878;
+        --bg:         #1a1208;
+
+        --font-display: 'Megrim', cursive;
+        --font-body:    'Nunito', system-ui, sans-serif;
+
+        --t-fast: 180ms;
+        --t-med:  360ms;
+        --t-slow: 720ms;
+        --ease:     cubic-bezier(0.4, 0, 0.2, 1);
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+      html, body {
+        height: 100%;
+        height: -webkit-fill-available;
+      }
+      body {
+        margin: 0; padding: 0;
+        width: 100%;
+        min-height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+        background: #1a1208;
+        font-family: var(--font-body);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      img { display: block; max-width: 100%; }
+      button {
+        appearance: none; border: 0; background: 0; cursor: pointer;
+        font: inherit; color: inherit;
+      }
+      input, select {
+        font: inherit; color: inherit;
+      }
+
+      a-scene {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 1;
+      }
+      a-scene canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
+      }
+      .a-enter-vr, .a-enter-ar,
+      .a-enter-vr-button, .a-enter-ar-button { display: none !important; }
+
+      /* ==========================================================
+         SCREEN SYSTEM
+         ========================================================== */
+      .screen {
+        position: fixed; inset: 0;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: max(env(safe-area-inset-top, 0px), 1rem)
+                 1.4rem
+                 max(env(safe-area-inset-bottom, 0px), 1.2rem);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity var(--t-med) var(--ease),
+                    visibility var(--t-med) var(--ease);
+        pointer-events: none;
+      }
+      .screen.is-active {
+        opacity: 1; visibility: visible;
+        pointer-events: auto;
+      }
+
+      /* ==========================================================
+         STATE 1 · INTRO / MAIN MENU
+         ========================================================== */
+      #screen-intro {
+        z-index: 50;
+        background: #1a1208;
+        justify-content: flex-start;
+        padding: 0;
+      }
+      .intro-bg {
+        position: absolute;
+        inset: 0;
+        background-image: url('./assets/landscape.jpg');
+        background-size: cover;
+        background-position: center;
+        filter: brightness(0.78) saturate(1.05);
+        z-index: 0;
+      }
+      .intro-bg::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(20, 14, 8, 0.92) 0%,
+          rgba(20, 14, 8, 0.55) 32%,
+          rgba(20, 14, 8, 0.25) 55%,
+          rgba(20, 14, 8, 0.45) 78%,
+          rgba(20, 14, 8, 0.85) 100%
+        );
+      }
+      .intro-inner {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: max(env(safe-area-inset-top, 0px), 1.2rem)
+                 1.6rem
+                 max(env(safe-area-inset-bottom, 0px), 1.8rem);
+      }
+      .intro-langbar {
+        align-self: flex-end;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--magenta);
+        font-size: 1.4rem;
+        opacity: 0.9;
+      }
+      .intro-langbar .flag {
+        font-size: 1.4rem;
+        line-height: 1;
+      }
+      .intro-langbar .caret {
+        width: 14px;
+        height: 14px;
+        stroke: var(--magenta);
+        fill: none;
+        stroke-width: 2.5;
+      }
+      .intro-logo {
+        width: 64px;
+        height: 64px;
+        margin-top: 1rem;
+        border-radius: 50%;
+        background: radial-gradient(circle at 50% 45%, #fff 0%, #f3e2c8 60%, #cfa377 100%);
+        display: grid;
+        place-items: center;
+        font-size: 2rem;
+        line-height: 1;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+        position: relative;
+      }
+      .intro-logo svg { width: 56px; height: 56px; }
+      .intro-title {
+        margin: 0.9rem 0 0.7rem;
+        font-family: var(--font-display);
+        font-size: clamp(1.8rem, 7vw, 2.4rem);
+        letter-spacing: 0.08em;
+        color: var(--orange);
+        text-align: center;
+        line-height: 1;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+      }
+      .intro-tagline {
+        margin: 0 0 1rem;
+        font-style: italic;
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #fdf6e3;
+        text-align: center;
+      }
+      .intro-desc {
+        margin: 0;
+        max-width: 22rem;
+        font-style: italic;
+        font-weight: 300;
+        font-size: 0.95rem;
+        line-height: 1.45;
+        color: rgba(253, 246, 227, 0.92);
+        text-align: center;
+      }
+      .intro-spacer { flex: 1; }
+      .intro-cta {
+        width: min(86vw, 360px);
+        background: var(--orange);
+        color: #fff;
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 1.2rem;
+        padding: 1.1rem 1.4rem;
+        border-radius: 999px;
+        box-shadow: 0 10px 28px rgba(228, 128, 67, 0.45);
+        transition: transform var(--t-fast) var(--ease),
+                    box-shadow var(--t-fast) var(--ease);
+      }
+      .intro-cta:active {
+        transform: translateY(1px) scale(0.98);
+        box-shadow: 0 4px 14px rgba(228, 128, 67, 0.32);
+      }
+
+      /* ==========================================================
+         STATE 2 · CAMERA PERMISSION
+         ========================================================== */
+      #screen-permission {
+        z-index: 51;
+        background: #1a1208;
+        justify-content: center;
+        padding: 0;
+      }
+      .perm-back {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 1rem);
+        left: 1.2rem;
+        z-index: 2;
+        font-size: 1.4rem;
+        color: var(--magenta);
+        line-height: 1;
+        padding: 0.6rem;
+      }
+      .perm-card {
+        position: relative;
+        z-index: 1;
+        background: var(--orange);
+        color: #fff;
+        border-radius: 28px;
+        padding: 2rem 1.8rem 1.6rem;
+        width: min(84vw, 360px);
+        text-align: center;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+        transform: translateY(20px) scale(0.96);
+        opacity: 0;
+        transition: transform var(--t-slow) var(--ease-out),
+                    opacity var(--t-slow) var(--ease-out);
+      }
+      #screen-permission.is-active .perm-card {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      .perm-icon {
+        margin: 0.4rem auto 1.1rem;
+        width: 56px;
+        height: 56px;
+        display: grid;
+        place-items: center;
+      }
+      .perm-icon svg { width: 56px; height: 56px; stroke: #fff; }
+      .perm-title {
+        margin: 0 0 1rem;
+        font-family: var(--font-display);
+        font-size: 1.8rem;
+        letter-spacing: 0.08em;
+      }
+      .perm-body {
+        margin: 0 0 1.6rem;
+        font-style: italic;
+        font-weight: 600;
+        line-height: 1.45;
+        font-size: 1rem;
+      }
+      .perm-actions {
+        display: flex;
+        gap: 0.7rem;
+        justify-content: center;
+      }
+      .perm-btn {
+        flex: 1;
+        max-width: 160px;
+        padding: 0.9rem 1.2rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: transform var(--t-fast) var(--ease);
+      }
+      .perm-btn:active { transform: scale(0.97); }
+      .perm-btn--ghost { background: #fff; color: var(--ink); }
+      .perm-btn--solid { background: var(--magenta); color: #fff; box-shadow: 0 6px 18px rgba(200,67,138,0.35); }
+
+      /* ==========================================================
+         STATE 3 · SCANNING
+         ========================================================== */
+      #screen-scan { background: transparent; pointer-events: auto; }
+      .scan-frame {
+        position: relative;
+        margin-top: 22vh;
+        width: min(70vw, 280px);
+        aspect-ratio: 0.62;
+        border: 1px solid rgba(253, 246, 227, 0.45);
+        animation: scan-pulse 2.4s ease-in-out infinite;
+      }
+      .scan-frame::before,
+      .scan-frame::after,
+      .scan-frame > i:nth-child(1),
+      .scan-frame > i:nth-child(2) {
+        content: '';
+        position: absolute;
+        width: 22px; height: 22px;
+        border: 2px solid var(--orange);
+      }
+      .scan-frame::before { top: -1px; left: -1px;  border-right: 0; border-bottom: 0; }
+      .scan-frame::after  { top: -1px; right: -1px; border-left:  0; border-bottom: 0; }
+      .scan-frame > i:nth-child(1) { bottom: -1px; left: -1px;  border-right: 0; border-top: 0; }
+      .scan-frame > i:nth-child(2) { bottom: -1px; right: -1px; border-left:  0; border-top: 0; }
+      .scan-hint {
+        position: absolute;
+        top: calc(100% + 1.8rem);
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: var(--font-display);
+        font-size: 1.3rem;
+        letter-spacing: 0.18em;
+        color: #fdf6e3;
+        white-space: nowrap;
+        text-align: center;
+      }
+      .scan-hint em {
+        display: block;
+        font-family: var(--font-body);
+        font-style: normal;
+        font-weight: 300;
+        font-size: 0.72rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(253, 246, 227, 0.5);
+        margin-top: 0.6rem;
+      }
+      @keyframes scan-pulse {
+        0%, 100% { transform: scale(1);     opacity: 1;    }
+        50%      { transform: scale(1.035); opacity: 0.55; }
+      }
+      .dev-skip {
+        position: fixed;
+        bottom: calc(env(safe-area-inset-bottom, 0) + 1rem);
+        right: 1rem;
+        z-index: 100;
+        font-size: 0.7rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(253, 246, 227, 0.5);
+        padding: 0.5rem 0.9rem;
+        border: 1px solid rgba(253, 246, 227, 0.2);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(6px);
+      }
+      body:not(.is-debug) .dev-skip { display: none; }
+
+      /* ==========================================================
+         STATE 4 · BEE (AR overlay UI)
+         ========================================================== */
+      #screen-bee {
+        background: transparent;
+        pointer-events: none;
+        justify-content: flex-end;
+      }
+      .bee-msg {
+        pointer-events: none;
+        margin-bottom: 1rem;
+        color: #fdf6e3;
+        font-family: var(--font-display);
+        font-size: 1.4rem;
+        letter-spacing: 0.12em;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.6s ease, transform 0.6s ease;
+      }
+      #screen-bee.is-active .bee-msg {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .bee-cta {
+        pointer-events: auto;
+        background: var(--orange);
+        color: #fff;
+        font-weight: 600;
+        font-size: 1.05rem;
+        padding: 0.95rem 2.2rem;
+        border-radius: 999px;
+        box-shadow: 0 8px 22px rgba(228,128,67,0.45);
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.6s ease 1.6s, transform 0.6s ease 1.6s;
+      }
+      #screen-bee.is-active .bee-cta {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .bee-cta:active { transform: scale(0.97); }
+
+      /* ==========================================================
+         STATE 5 · PROFILE
+         ========================================================== */
+      #screen-profile {
+        background: var(--cream);
+        justify-content: center;
+        overflow: hidden;
+      }
+      .profile-bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 12% 8%, rgba(228,128,67,0.18) 0 60px, transparent 80px),
+          radial-gradient(circle at 88% 16%, rgba(228,128,67,0.18) 0 80px, transparent 100px);
+        opacity: 0.55;
+      }
+      .profile-dots {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .profile-bee {
+        position: absolute;
+        z-index: 0;
+        font-size: 2.6rem;
+        opacity: 0.55;
+        filter: hue-rotate(-12deg) saturate(0.9);
+      }
+      .profile-bee.b1 { top: 5%;  left: 8%; transform: rotate(-12deg); }
+      .profile-bee.b2 { top: 10%; right: 6%; transform: rotate(18deg) scaleX(-1); font-size: 3rem; }
+      .profile-back {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 1rem);
+        left: 1.2rem;
+        z-index: 2;
+        font-size: 1.4rem;
+        color: var(--magenta);
+        line-height: 1;
+        padding: 0.6rem;
+      }
+      .profile-card {
+        position: relative;
+        z-index: 1;
+        width: min(86vw, 360px);
+        background: var(--orange);
+        border-radius: 24px;
+        padding: 1.8rem 1.6rem 1.7rem;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+        color: #fff;
+      }
+      .profile-title {
+        margin: 0 0 1.4rem;
+        font-family: var(--font-display);
+        font-size: 1.85rem;
+        letter-spacing: 0.07em;
+        line-height: 1.1;
+      }
+      .profile-label {
+        display: block;
+        margin: 0 0 0.4rem;
+        font-style: italic;
+        font-weight: 600;
+        font-size: 1rem;
+        color: #fff;
+      }
+      .profile-field {
+        position: relative;
+        margin-bottom: 1.1rem;
+      }
+      .profile-field select,
+      .profile-field input {
+        width: 100%;
+        background: #fff;
+        color: var(--ink);
+        border: 0;
+        border-radius: 999px;
+        padding: 0.95rem 1.2rem;
+        font-size: 1rem;
+        outline: none;
+      }
+      .profile-field select {
+        appearance: none;
+        -webkit-appearance: none;
+        padding-right: 2.6rem;
+      }
+      .profile-field .caret {
+        position: absolute;
+        right: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px; height: 16px;
+        stroke: var(--ink-soft);
+        fill: none;
+        stroke-width: 2.5;
+        pointer-events: none;
+      }
+      .profile-continue {
+        display: block;
+        margin: 1.5rem auto 0;
+        background: var(--magenta);
+        color: #fff;
+        font-weight: 600;
+        font-size: 1.05rem;
+        padding: 0.9rem 2.4rem;
+        border-radius: 999px;
+        box-shadow: 0 8px 22px rgba(200,67,138,0.4);
+        position: relative;
+        z-index: 1;
+        transition: transform var(--t-fast) var(--ease);
+      }
+      .profile-continue:active { transform: scale(0.97); }
+      .profile-continue:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      /* ==========================================================
+         STATE 6 · MAP (Leave Your Trace)
+         ========================================================== */
+      #screen-map {
+        background: var(--map-bg);
+        padding: 0;
+        justify-content: flex-start;
+        overflow: hidden;
+      }
+      .map-wrap {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      .map-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .map-svg .ocean { fill: var(--map-bg); }
+      .map-svg .land  { fill: var(--map-land); stroke: rgba(80,55,30,0.18); stroke-width: 0.5; }
+
+      /* Country label hints (small) */
+      .map-label {
+        position: absolute;
+        font-size: 0.55rem;
+        letter-spacing: 0.16em;
+        font-weight: 700;
+        color: rgba(40,28,14,0.55);
+        text-transform: uppercase;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+
+      /* Bee markers that wander */
+      .bee-mark {
+        position: absolute;
+        font-size: 1.4rem;
+        line-height: 1;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2));
+        animation: bee-wander 14s ease-in-out infinite;
+      }
+      .bee-mark.flip { transform: translate(-50%, -50%) scaleX(-1); }
+      @keyframes bee-wander {
+        0%, 100% { transform: translate(-50%, -50%) translate(0px, 0px); }
+        25%      { transform: translate(-50%, -50%) translate(18px, -10px); }
+        50%      { transform: translate(-50%, -50%) translate(8px, 12px); }
+        75%      { transform: translate(-50%, -50%) translate(-14px, -6px); }
+      }
+
+      /* Trace pin (cherry / fruit icon) */
+      .trace-pin {
+        position: absolute;
+        width: 38px; height: 38px;
+        margin-left: -19px; margin-top: -19px;
+        border-radius: 50%;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 1.1rem;
+        line-height: 1;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+        border: 2px solid #fff;
+        cursor: pointer;
+        z-index: 2;
+        transition: transform var(--t-fast) var(--ease);
+      }
+      .trace-pin:active { transform: scale(0.9); }
+      .trace-pin.is-mine { box-shadow: 0 0 0 3px var(--magenta), 0 6px 14px rgba(0,0,0,0.3); }
+
+      /* Trace bubble (quote callout) */
+      .trace-bubble {
+        position: absolute;
+        z-index: 4;
+        background: var(--magenta);
+        color: #fff;
+        border-radius: 18px;
+        padding: 0.95rem 1.1rem 0.95rem 3rem;
+        max-width: 78vw;
+        min-width: 250px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+        opacity: 0;
+        transform: translateY(6px) scale(0.96);
+        transition: opacity 0.32s ease, transform 0.32s ease;
+        pointer-events: none;
+      }
+      .trace-bubble.is-open {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+      .trace-bubble .bub-icon {
+        position: absolute;
+        left: -14px; top: -14px;
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 1.3rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+      }
+      .trace-bubble .bub-quote {
+        margin: 0;
+        font-style: italic;
+        font-weight: 600;
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+      .trace-bubble .bub-meta {
+        margin-top: 0.5rem;
+        background: rgba(255,255,255,0.18);
+        color: #fff;
+        border-radius: 999px;
+        padding: 0.3rem 0.7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+      }
+      .trace-bubble .bub-meta .who {
+        font-family: var(--font-display);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #C8F2EA;
+        font-size: 0.78rem;
+        margin-right: 0.2rem;
+      }
+      .trace-bubble .bub-close {
+        position: absolute;
+        top: 6px; right: 8px;
+        font-size: 0.85rem;
+        color: rgba(255,255,255,0.7);
+        padding: 0.2rem 0.45rem;
+        line-height: 1;
+      }
+
+      /* Bottom trace input panel */
+      .trace-panel {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        z-index: 5;
+        background: var(--orange);
+        border-radius: 26px 26px 0 0;
+        padding: 2rem 1.4rem calc(env(safe-area-inset-bottom, 0px) + 1.2rem);
+        text-align: center;
+        color: #fff;
+        box-shadow: 0 -10px 30px rgba(0,0,0,0.18);
+      }
+      .trace-bee-badge {
+        position: absolute;
+        top: -32px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 64px; height: 64px;
+        background: #fff;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 2rem;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+      }
+      .trace-title {
+        margin: 0 0 0.7rem;
+        font-family: var(--font-display);
+        font-size: 1.4rem;
+        letter-spacing: 0.1em;
+      }
+      .trace-input-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #fff;
+        border-radius: 999px;
+        padding: 0.55rem 0.6rem 0.55rem 1.2rem;
+      }
+      .trace-input-row input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        outline: none;
+        font-size: 0.95rem;
+        color: var(--ink);
+        font-style: italic;
+        padding: 0.4rem 0;
+      }
+      .trace-input-row input::placeholder { color: var(--ink-faint); font-style: italic; }
+      .trace-send {
+        background: var(--magenta);
+        color: #fff;
+        padding: 0.55rem 1rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+      }
+      .trace-send:disabled { opacity: 0.5; }
+
+      /* Flavor strip (locked / unlocked) */
+      .flavor-strip {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 0.7rem);
+        left: 1rem;
+        right: 1rem;
+        z-index: 6;
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        pointer-events: none;
+      }
+      .flavor-chip {
+        background: rgba(255,255,255,0.92);
+        border-radius: 999px;
+        padding: 0.35rem 0.85rem 0.35rem 0.4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--ink);
+        letter-spacing: 0.04em;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        pointer-events: auto;
+      }
+      .flavor-chip .pip {
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 0.9rem;
+        line-height: 1;
+        background: var(--orange-soft);
+      }
+      .flavor-chip.locked { color: var(--ink-soft); background: rgba(255,255,255,0.75); }
+      .flavor-chip.locked .pip { background: rgba(0,0,0,0.08); }
+
+      .map-back {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 0.8rem);
+        right: 1rem;
+        z-index: 7;
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.85);
+        display: grid;
+        place-items: center;
+        color: var(--ink);
+        font-size: 1.1rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+      }
+
+      /* Toast for "trace added" */
+      .toast {
+        position: fixed;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 11rem);
+        left: 50%;
+        transform: translateX(-50%) translateY(10px);
+        z-index: 200;
+        background: rgba(40,28,14,0.92);
+        color: #fdf6e3;
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        padding: 0.6rem 1.1rem;
+        border-radius: 999px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      .toast.is-on {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      /* Restart pill */
+      .restart-btn {
+        position: fixed;
+        bottom: calc(env(safe-area-inset-bottom, 0) + 1rem);
+        left: 1rem;
+        z-index: 100;
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(6px);
+        color: rgba(253, 246, 227, 0.85);
+        font-size: 1rem;
+        display: none;
+        place-items: center;
+        border: 1px solid rgba(253, 246, 227, 0.18);
+      }
+      body[data-state="scan"] .restart-btn,
+      body[data-state="bee"] .restart-btn,
+      body[data-state="profile"] .restart-btn { display: grid; }
+      body[data-state="map"]    .restart-btn { display: none; }
+    </style>
+  </head>
+
+  <body data-state="intro">
+
+    <!-- ============================================================
+         AR SCENE  ·  camera feed + bee.glb on detected can
+         ============================================================ -->
+    <a-scene
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights: true, antialias: true, alpha: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+      embedded
+    >
+      <a-assets timeout="30000">
+        <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
+      <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
+
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
+        <!-- Bee model: positioned just above the can, scaled small.
+             flight-orbit slowly circles + bobs the bee.
+             animation-mixer plays the bundled flying loop. -->
+        <a-entity
+          id="bee-entity"
+          gltf-model="#bee-model"
+          position="0 0.05 0.05"
+          rotation="0 0 0"
+          scale="0.18 0.18 0.18"
+          animation-mixer="clip: *; loop: repeat"
+          flight-orbit="radius: 0.32; speed: 0.6; bobAmp: 0.05; bobSpeed: 1.6"
+        ></a-entity>
+      </a-entity>
+    </a-scene>
+
+    <!-- ============================================================
+         STATE 1 · INTRO / MAIN MENU
+         ============================================================ -->
+    <section id="screen-intro" class="screen is-active">
+      <div class="intro-bg"></div>
+      <div class="intro-inner">
+        <div class="intro-langbar" aria-label="Language">
+          <span class="flag" aria-hidden="true">🇬🇧</span>
+          <svg class="caret" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <div class="intro-logo" aria-hidden="true">
+          <!-- bull-head bottle-cap mark -->
+          <svg viewBox="0 0 64 64" fill="none">
+            <circle cx="32" cy="32" r="28" fill="#f4e1c5" stroke="#3b2412" stroke-width="2"/>
+            <path d="M14 30c0-6 4-10 8-12-2 4-1 8 2 10" stroke="#3b2412" stroke-width="2" stroke-linecap="round"/>
+            <path d="M50 30c0-6-4-10-8-12 2 4 1 8-2 10" stroke="#3b2412" stroke-width="2" stroke-linecap="round"/>
+            <path d="M20 30c4 8 8 14 12 14s8-6 12-14" stroke="#3b2412" stroke-width="2" stroke-linecap="round" fill="#3b2412"/>
+            <circle cx="26" cy="32" r="1.6" fill="#f4e1c5"/>
+            <circle cx="38" cy="32" r="1.6" fill="#f4e1c5"/>
+            <path d="M28 42c2 1.5 6 1.5 8 0" stroke="#E48043" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <h1 class="intro-title">CERVECERIA DE ZARRA</h1>
+        <p class="intro-tagline">Beer. Land. People.</p>
+        <p class="intro-desc">
+          Based on the Spanish tradition of La Sobremesa –
+          time spent chatting and connecting after a meal,
+          this time your beer!
+        </p>
+
+        <div class="intro-spacer"></div>
+
+        <button class="intro-cta" id="start-btn">Start Experience</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         STATE 2 · CAMERA PERMISSION
+         ============================================================ -->
+    <section id="screen-permission" class="screen">
+      <button class="perm-back" id="perm-back" aria-label="Back">‹</button>
+      <div class="perm-card">
+        <div class="perm-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8a2 2 0 0 1 2-2h2.2l1.3-2h6.9l1.3 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/>
+            <circle cx="12" cy="13" r="3.6"/>
+          </svg>
+        </div>
+        <h2 class="perm-title">CAMERA ACCESS</h2>
+        <p class="perm-body">zarra.cervesa wants to use your camera<br/>to bring smth to live</p>
+        <div class="perm-actions">
+          <button class="perm-btn perm-btn--ghost" id="perm-deny">Not Now</button>
+          <button class="perm-btn perm-btn--solid" id="perm-allow">Allow</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         STATE 3 · SCANNING
+         ============================================================ -->
+    <section id="screen-scan" class="screen">
+      <div class="scan-frame">
+        <i></i><i></i>
+        <div class="scan-hint">
+          Find the can
+          <em>Frame it within</em>
+        </div>
+      </div>
+      <button class="dev-skip" id="dev-skip">Skip detect →</button>
+    </section>
+
+    <!-- ============================================================
+         STATE 4 · BEE (AR overlay UI)
+         ============================================================ -->
+    <section id="screen-bee" class="screen">
+      <p class="bee-msg">A little visitor…</p>
+      <button class="bee-cta" id="bee-cta">Continue</button>
+    </section>
+
+    <!-- ============================================================
+         STATE 5 · PROFILE
+         ============================================================ -->
+    <section id="screen-profile" class="screen">
+      <div class="profile-bg"></div>
+      <svg class="profile-dots" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 800">
+        <defs>
+          <pattern id="dotpat" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.4" fill="#E48043"/>
+          </pattern>
+        </defs>
+        <path d="M40 540 Q120 480 220 530 T380 540 L380 760 L40 760 Z" fill="url(#dotpat)" opacity="0.7"/>
+        <path d="M0 80 Q80 60 160 100 L160 200 L0 200 Z" fill="url(#dotpat)" opacity="0.55"/>
+      </svg>
+      <span class="profile-bee b1" aria-hidden="true">🐝</span>
+      <span class="profile-bee b2" aria-hidden="true">🐝</span>
+      <button class="profile-back" id="profile-back" aria-label="Back">‹</button>
+
+      <div class="profile-card">
+        <h2 class="profile-title">TELL US ABOUT<br/>YOURSELF</h2>
+
+        <div class="profile-field">
+          <label class="profile-label" for="country">Select your country</label>
+          <select id="country" name="country">
+            <option value="NL" data-flag="🇳🇱">🇳🇱 The Netherlands</option>
+            <option value="ES" data-flag="🇪🇸">🇪🇸 Spain</option>
+            <option value="PT" data-flag="🇵🇹">🇵🇹 Portugal</option>
+            <option value="FR" data-flag="🇫🇷">🇫🇷 France</option>
+            <option value="DE" data-flag="🇩🇪">🇩🇪 Germany</option>
+            <option value="IT" data-flag="🇮🇹">🇮🇹 Italy</option>
+            <option value="GB" data-flag="🇬🇧">🇬🇧 United Kingdom</option>
+            <option value="IE" data-flag="🇮🇪">🇮🇪 Ireland</option>
+            <option value="BE" data-flag="🇧🇪">🇧🇪 Belgium</option>
+            <option value="US" data-flag="🇺🇸">🇺🇸 United States</option>
+            <option value="MX" data-flag="🇲🇽">🇲🇽 Mexico</option>
+            <option value="AR" data-flag="🇦🇷">🇦🇷 Argentina</option>
+            <option value="BR" data-flag="🇧🇷">🇧🇷 Brazil</option>
+            <option value="JP" data-flag="🇯🇵">🇯🇵 Japan</option>
+            <option value="AU" data-flag="🇦🇺">🇦🇺 Australia</option>
+          </select>
+          <svg class="caret" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <div class="profile-field">
+          <label class="profile-label" for="name">Your name</label>
+          <input id="name" name="name" type="text" placeholder="Sara" autocomplete="given-name" />
+        </div>
+      </div>
+
+      <button class="profile-continue" id="profile-continue" disabled>Continue</button>
+    </section>
+
+    <!-- ============================================================
+         STATE 6 · MAP (Leave Your Trace)
+         ============================================================ -->
+    <section id="screen-map" class="screen">
+      <button class="map-back" id="map-back" aria-label="Restart">↺</button>
+
+      <div class="flavor-strip" id="flavor-strip">
+        <div class="flavor-chip"><span class="pip">🍊</span><span>ALBA · Orange Wheat</span></div>
+        <div class="flavor-chip locked"><span class="pip">🔒</span><span>Locked</span></div>
+        <div class="flavor-chip locked"><span class="pip">🔒</span><span>Locked</span></div>
+      </div>
+
+      <div class="map-wrap" id="map-wrap">
+        <!-- Stylised world map (low-detail blobs) -->
+        <svg
+          class="map-svg"
+          viewBox="0 0 1000 600"
+          preserveAspectRatio="xMidYMid slice"
+          aria-hidden="true"
+        >
+          <rect class="ocean" x="0" y="0" width="1000" height="600"/>
+          <!-- North America -->
+          <path class="land" d="M70 120 Q90 80 160 75 Q230 70 270 90 Q310 110 330 100 Q360 90 380 110 Q400 130 380 170 Q360 210 320 240 Q300 280 270 300 Q230 320 200 310 Q170 295 150 255 Q130 220 100 200 Q70 175 70 120 Z"/>
+          <!-- Greenland -->
+          <path class="land" d="M380 60 Q420 50 430 80 Q435 110 415 130 Q395 145 380 130 Q365 105 380 60 Z"/>
+          <!-- Central + Caribbean -->
+          <path class="land" d="M230 320 Q255 330 270 350 Q280 370 260 380 Q240 380 220 365 Q205 350 230 320 Z"/>
+          <!-- South America -->
+          <path class="land" d="M275 360 Q310 360 330 390 Q355 430 360 480 Q355 525 325 555 Q295 575 275 555 Q255 520 260 470 Q260 420 275 360 Z"/>
+          <!-- Europe -->
+          <path class="land" d="M470 130 Q495 110 535 115 Q570 120 590 145 Q605 170 585 195 Q560 215 520 215 Q485 210 470 190 Q460 165 470 130 Z"/>
+          <!-- Africa -->
+          <path class="land" d="M490 230 Q540 220 580 240 Q610 260 615 300 Q610 350 590 390 Q560 430 525 440 Q495 435 480 400 Q465 360 470 320 Q475 270 490 230 Z"/>
+          <!-- Middle East / Asia -->
+          <path class="land" d="M600 160 Q660 145 730 160 Q790 170 830 200 Q860 230 855 270 Q830 295 790 295 Q740 290 690 280 Q640 270 620 240 Q605 210 600 160 Z"/>
+          <!-- India -->
+          <path class="land" d="M720 280 Q745 285 755 320 Q755 350 735 360 Q715 355 710 325 Q708 300 720 280 Z"/>
+          <!-- SE Asia / Indonesia -->
+          <path class="land" d="M810 300 Q860 305 880 335 Q880 365 855 375 Q825 370 810 345 Q800 320 810 300 Z"/>
+          <!-- Australia -->
+          <path class="land" d="M830 410 Q880 405 915 425 Q940 450 925 475 Q890 490 850 480 Q820 465 825 440 Q827 420 830 410 Z"/>
+          <!-- New Zealand -->
+          <path class="land" d="M945 480 Q955 485 955 500 Q945 510 938 500 Q935 488 945 480 Z"/>
+          <!-- Japan -->
+          <path class="land" d="M895 235 Q910 225 915 245 Q910 265 895 260 Q885 250 895 235 Z"/>
+          <!-- UK -->
+          <path class="land" d="M455 145 Q467 140 470 155 Q468 170 458 170 Q448 162 455 145 Z"/>
+          <!-- Madagascar -->
+          <path class="land" d="M625 380 Q636 380 638 400 Q635 420 625 418 Q616 405 625 380 Z"/>
+        </svg>
+
+        <!-- map-label positions are in % of map-wrap -->
+        <span class="map-label" style="left: 12%; top: 28%;">CANADA</span>
+        <span class="map-label" style="left: 18%; top: 38%;">USA</span>
+        <span class="map-label" style="left: 27%; top: 64%;">PERU</span>
+        <span class="map-label" style="left: 31%; top: 75%;">BOLIVIA</span>
+        <span class="map-label" style="left: 30%; top: 88%;">ARGENTINA</span>
+        <span class="map-label" style="left: 49%; top: 26%;">UK</span>
+        <span class="map-label" style="left: 51%; top: 33%;">FRANCE</span>
+        <span class="map-label" style="left: 56%; top: 32%;">GERMANY</span>
+        <span class="map-label" style="left: 52%; top: 41%;">SPAIN</span>
+        <span class="map-label" style="left: 58%; top: 43%;">ITALY</span>
+        <span class="map-label" style="left: 60%; top: 55%;">ALGERIA</span>
+        <span class="map-label" style="left: 65%; top: 56%;">LIBYA</span>
+        <span class="map-label" style="left: 70%; top: 53%;">EGYPT</span>
+        <span class="map-label" style="left: 67%; top: 70%;">CHAD</span>
+        <span class="map-label" style="left: 60%; top: 68%;">NIGERIA</span>
+        <span class="map-label" style="left: 80%; top: 47%;">SAUDI ARABIA</span>
+        <span class="map-label" style="left: 80%; top: 52%;">IRAQ</span>
+        <span class="map-label" style="left: 76%; top: 42%;">TURKEY</span>
+        <span class="map-label" style="left: 86%; top: 60%;">INDIA</span>
+        <span class="map-label" style="left: 87%; top: 80%;">AUSTRALIA</span>
+
+        <!-- Wandering bees + traces injected by JS -->
+        <div id="map-bees"></div>
+        <div id="map-traces"></div>
+
+        <!-- The single popup bubble (re-used for whichever pin is tapped) -->
+        <div class="trace-bubble" id="trace-bubble" role="dialog" aria-modal="false">
+          <div class="bub-icon" id="bub-icon">🍒</div>
+          <button class="bub-close" id="bub-close" aria-label="Close">✕</button>
+          <p class="bub-quote" id="bub-quote"></p>
+          <span class="bub-meta">
+            <span>A trace from</span>
+            <span class="who" id="bub-who"></span>
+            <span>📍</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="trace-panel">
+        <div class="trace-bee-badge" aria-hidden="true">🐝</div>
+        <h3 class="trace-title">LEAVE YOUR TRACE…</h3>
+        <div class="trace-input-row">
+          <input id="trace-input" type="text" placeholder="type here …" maxlength="120" />
+          <button class="trace-send" id="trace-send" disabled>Send</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast">Your trace is on the map ✦</div>
+    <button class="restart-btn" id="restart-btn" title="Restart">↺</button>
+
+    <script>
+      /* ============================================================
+         FLIGHT-ORBIT — gently orbits + bobs the bee around the can
+         ============================================================ */
+      AFRAME.registerComponent('flight-orbit', {
+        schema: {
+          radius:   { default: 0.3 },
+          speed:    { default: 0.6 },   // radians/sec
+          bobAmp:   { default: 0.05 },
+          bobSpeed: { default: 1.6 },
+        },
+        init: function () {
+          this.t0 = 0;
+          this.origin = { x: 0, y: 0.05, z: 0.05 };
+        },
+        tick: function (time, dt) {
+          this.t0 += (dt || 0) / 1000;
+          const d = this.data;
+          const a = this.t0 * d.speed;
+          const x = this.origin.x + Math.cos(a) * d.radius;
+          const z = this.origin.z + Math.sin(a) * d.radius * 0.4;
+          const y = this.origin.y + Math.sin(this.t0 * d.bobSpeed) * d.bobAmp;
+          this.el.object3D.position.set(x, y, z);
+          // face direction of motion
+          this.el.object3D.rotation.y = -a + Math.PI / 2;
+        },
+      });
+
+      /* ============================================================
+         STATE
+         ============================================================ */
+      const STATES = ['intro', 'permission', 'scan', 'bee', 'profile', 'map'];
+      let state = 'intro';
+      const body = document.body;
+      const scene = document.querySelector('a-scene');
+      const target0 = document.getElementById('target-0');
+
+      function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
+
+      function goTo(next) {
+        if (next === state) return;
+        document.querySelectorAll('.screen').forEach((s) => s.classList.remove('is-active'));
+        document.getElementById('screen-' + next).classList.add('is-active');
+        body.dataset.state = next;
+        state = next;
+        if (next === 'map') renderMap();
+      }
+
+      /* ============================================================
+         MIND-AR START — happens after user taps Allow
+         ============================================================ */
+      async function startMindAR() {
+        try {
+          const sys = scene.systems['mindar-image-system'];
+          if (sys && sys.start) await sys.start();
+        } catch (e) {
+          console.error('mindar start failed:', e);
+          alert('Could not start the camera. Please allow camera access and reload.');
+        }
+      }
+      async function stopMindAR() {
+        try {
+          const sys = scene.systems['mindar-image-system'];
+          if (sys && sys.stop) await sys.stop();
+        } catch (_) {}
+      }
+
+      /* ============================================================
+         INTRO  →  PERMISSION
+         ============================================================ */
+      document.getElementById('start-btn').addEventListener('click', () => {
+        haptic([60]);
+        goTo('permission');
+      });
+
+      document.getElementById('perm-back').addEventListener('click', () => {
+        haptic([30]);
+        goTo('intro');
+      });
+      document.getElementById('perm-deny').addEventListener('click', () => {
+        haptic([30]);
+        goTo('intro');
+      });
+      document.getElementById('perm-allow').addEventListener('click', async () => {
+        haptic([80]);
+        goTo('scan');
+        const start = () => startMindAR();
+        if (scene.hasLoaded) await start();
+        else scene.addEventListener('loaded', start, { once: true });
+      });
+
+      /* ============================================================
+         SCAN → BEE (target detection)
+         ============================================================ */
+      target0.addEventListener('targetFound', () => {
+        if (state === 'scan') {
+          haptic([80, 60, 140]);
+          goTo('bee');
+        }
+      });
+
+      document.getElementById('bee-cta').addEventListener('click', async () => {
+        haptic([60]);
+        await stopMindAR();
+        goTo('profile');
+      });
+
+      /* ============================================================
+         PROFILE
+         ============================================================ */
+      const nameInput = document.getElementById('name');
+      const countrySel = document.getElementById('country');
+      const profileContinue = document.getElementById('profile-continue');
+
+      // Prefill from previous session
+      try {
+        const saved = JSON.parse(localStorage.getItem('zarra:profile') || 'null');
+        if (saved) {
+          nameInput.value = saved.name || '';
+          if (saved.country) countrySel.value = saved.country;
+        }
+      } catch (_) {}
+
+      function updateContinueState() {
+        profileContinue.disabled = !nameInput.value.trim();
+      }
+      nameInput.addEventListener('input', updateContinueState);
+      updateContinueState();
+
+      document.getElementById('profile-back').addEventListener('click', () => {
+        goTo('bee');
+      });
+
+      profileContinue.addEventListener('click', () => {
+        if (profileContinue.disabled) return;
+        haptic([60]);
+        const selectedOpt = countrySel.options[countrySel.selectedIndex];
+        const profile = {
+          name: nameInput.value.trim(),
+          country: countrySel.value,
+          countryLabel: selectedOpt.textContent.replace(/^[^A-Za-z]+/, '').trim(),
+          flag: selectedOpt.dataset.flag || '🌍',
+        };
+        localStorage.setItem('zarra:profile', JSON.stringify(profile));
+        goTo('map');
+      });
+
+      /* ============================================================
+         MAP DATA
+         Trace coordinates are stored as % of the .map-wrap container,
+         which is what the SVG viewBox is fit to (slice). Tweaked so
+         markers fall on the painted landmasses.
+         ============================================================ */
+      const COUNTRY_COORDS = {
+        NL: { x: 52, y: 27, label: 'NETHERLANDS' },
+        ES: { x: 50, y: 39, label: 'SPAIN' },
+        PT: { x: 47, y: 40, label: 'PORTUGAL' },
+        FR: { x: 51, y: 32, label: 'FRANCE' },
+        DE: { x: 55, y: 30, label: 'GERMANY' },
+        IT: { x: 56, y: 38, label: 'ITALY' },
+        GB: { x: 48, y: 26, label: 'UK' },
+        IE: { x: 45, y: 26, label: 'IRELAND' },
+        BE: { x: 52, y: 30, label: 'BELGIUM' },
+        US: { x: 20, y: 38, label: 'USA' },
+        MX: { x: 22, y: 50, label: 'MEXICO' },
+        AR: { x: 31, y: 85, label: 'ARGENTINA' },
+        BR: { x: 35, y: 70, label: 'BRAZIL' },
+        JP: { x: 91, y: 38, label: 'JAPAN' },
+        AU: { x: 88, y: 80, label: 'AUSTRALIA' },
+      };
+
+      const SEED_TRACES = [
+        { id: 's1', quote: 'This beer really reminds me of hot summers spent with my family',
+          icon: '🍒', who: 'MARIA, SPAIN', x: 50, y: 39 },
+        { id: 's2', quote: 'Perfect after a long shift — tastes like the coast.',
+          icon: '🍊', who: 'JOÃO, PORTUGAL', x: 47, y: 40 },
+        { id: 's3', quote: 'Bringing a 6-pack to the rooftop tonight.',
+          icon: '🍊', who: 'EMMA, NETHERLANDS', x: 52, y: 27 },
+        { id: 's4', quote: 'I drank one in the Andes and watched the sun fall.',
+          icon: '🍒', who: 'LUCAS, ARGENTINA', x: 31, y: 85 },
+        { id: 's5', quote: 'Tastes like the orchards back home.',
+          icon: '🍊', who: 'AKIRA, JAPAN', x: 91, y: 38 },
+        { id: 's6', quote: 'Reminds me of road trips through the desert.',
+          icon: '🍊', who: 'SOFIA, MEXICO', x: 22, y: 50 },
+        { id: 's7', quote: 'Found one in a tiny pub. Slowest, best evening of the week.',
+          icon: '🍒', who: 'OLIVER, UK', x: 48, y: 26 },
+      ];
+
+      const BEE_SPOTS = [
+        { x: 14, y: 22 }, { x: 30, y: 18 }, { x: 60, y: 22 }, { x: 78, y: 32 },
+        { x: 20, y: 60 }, { x: 42, y: 64 }, { x: 70, y: 60 }, { x: 86, y: 50 },
+        { x: 24, y: 80 }, { x: 64, y: 75 }, { x: 88, y: 70 },
+      ];
+
+      function getTraces() {
+        try {
+          const local = JSON.parse(localStorage.getItem('zarra:traces') || '[]');
+          return [...SEED_TRACES, ...local];
+        } catch (_) {
+          return SEED_TRACES.slice();
+        }
+      }
+      function addTrace(t) {
+        let local = [];
+        try { local = JSON.parse(localStorage.getItem('zarra:traces') || '[]'); } catch (_) {}
+        local.push(t);
+        localStorage.setItem('zarra:traces', JSON.stringify(local));
+      }
+
+      /* ============================================================
+         MAP RENDER
+         ============================================================ */
+      const beesLayer   = document.getElementById('map-bees');
+      const tracesLayer = document.getElementById('map-traces');
+      const bubble      = document.getElementById('trace-bubble');
+      const bubIcon     = document.getElementById('bub-icon');
+      const bubQuote    = document.getElementById('bub-quote');
+      const bubWho      = document.getElementById('bub-who');
+
+      function renderMap() {
+        // Bees
+        beesLayer.innerHTML = '';
+        BEE_SPOTS.forEach((b, i) => {
+          const el = document.createElement('span');
+          el.className = 'bee-mark' + (i % 2 ? ' flip' : '');
+          el.textContent = '🐝';
+          el.style.left = b.x + '%';
+          el.style.top  = b.y + '%';
+          el.style.animationDelay = (i * 0.7) + 's';
+          beesLayer.appendChild(el);
+        });
+
+        // Traces
+        tracesLayer.innerHTML = '';
+        const all = getTraces();
+        all.forEach((t) => {
+          const pin = document.createElement('button');
+          pin.className = 'trace-pin' + (t.mine ? ' is-mine' : '');
+          pin.textContent = t.icon || '🍒';
+          pin.style.left = t.x + '%';
+          pin.style.top  = t.y + '%';
+          pin.setAttribute('aria-label', 'Trace from ' + t.who);
+          pin.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openBubble(t, pin);
+          });
+          tracesLayer.appendChild(pin);
+        });
+      }
+
+      function openBubble(t, pinEl) {
+        bubIcon.textContent  = t.icon || '🍒';
+        bubQuote.textContent = '“' + t.quote + '”';
+        bubWho.textContent   = t.who;
+        bubble.classList.add('is-open');
+
+        // Position bubble near the pin but keep on-screen
+        const wrap = document.getElementById('map-wrap');
+        const r    = wrap.getBoundingClientRect();
+        const pr   = pinEl.getBoundingClientRect();
+        const px   = pr.left - r.left + pr.width / 2;
+        const py   = pr.top  - r.top;
+        // bubble width: tweak after render
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translate(-50%, 0)';
+        // place vertically above pin if there's room, else below
+        const placeAbove = py > 180;
+        bubble.style.top = placeAbove ? (py - 130) + 'px' : (py + 32) + 'px';
+
+        // Once visible, recompute horizontal so it fits within wrap
+        requestAnimationFrame(() => {
+          const bw = bubble.offsetWidth;
+          let left = px - bw / 2;
+          left = Math.max(10, Math.min(left, r.width - bw - 10));
+          bubble.style.left = left + 'px';
+          bubble.style.transform = '';
+        });
+      }
+      function closeBubble() { bubble.classList.remove('is-open'); }
+      document.getElementById('bub-close').addEventListener('click', closeBubble);
+      document.getElementById('map-wrap').addEventListener('click', (e) => {
+        if (!e.target.closest('.trace-pin') && !e.target.closest('.trace-bubble')) closeBubble();
+      });
+
+      /* ============================================================
+         LEAVE YOUR TRACE
+         ============================================================ */
+      const traceInput = document.getElementById('trace-input');
+      const traceSend  = document.getElementById('trace-send');
+      const toast      = document.getElementById('toast');
+
+      traceInput.addEventListener('input', () => {
+        traceSend.disabled = !traceInput.value.trim();
+      });
+
+      traceSend.addEventListener('click', () => {
+        if (traceSend.disabled) return;
+        const profile = (() => {
+          try { return JSON.parse(localStorage.getItem('zarra:profile') || '{}'); }
+          catch (_) { return {}; }
+        })();
+        const cc = COUNTRY_COORDS[profile.country] || { x: 50, y: 50, label: 'EARTH' };
+        // Tiny random jitter so the user's pin doesn't overlap a seed exactly
+        const jx = (Math.random() - 0.5) * 4;
+        const jy = (Math.random() - 0.5) * 4;
+        const t = {
+          id:    't' + Date.now(),
+          quote: traceInput.value.trim(),
+          icon:  '🍊', // current unlocked flavor (ALBA / orange)
+          who:   (profile.name || 'YOU').toUpperCase() + ', ' + cc.label,
+          x:     cc.x + jx,
+          y:     cc.y + jy,
+          mine:  true,
+        };
+        addTrace(t);
+        traceInput.value = '';
+        traceSend.disabled = true;
+        renderMap();
+        haptic([60, 40, 100]);
+
+        toast.classList.add('is-on');
+        setTimeout(() => toast.classList.remove('is-on'), 1800);
+
+        // Auto-open the new trace
+        requestAnimationFrame(() => {
+          const last = tracesLayer.querySelector('.trace-pin.is-mine:last-child');
+          if (last) openBubble(t, last);
+        });
+      });
+
+      document.getElementById('map-back').addEventListener('click', () => {
+        haptic([30]);
+        restart();
+      });
+
+      /* ============================================================
+         RESTART
+         ============================================================ */
+      function restart() {
+        closeBubble();
+        traceInput.value = '';
+        traceSend.disabled = true;
+        goTo('intro');
+        stopMindAR();
+      }
+      document.getElementById('restart-btn').addEventListener('click', restart);
+
+      /* ============================================================
+         DEBUG MODE  (?debug)
+         ←/→ cycle states · Skip detect button on scan
+         ============================================================ */
+      if (location.search.includes('debug')) {
+        body.classList.add('is-debug');
+        document.addEventListener('keydown', (e) => {
+          const i = STATES.indexOf(state);
+          if (e.key === 'ArrowRight' || e.key === ' ') {
+            if (i < STATES.length - 1) goTo(STATES[i + 1]);
+          } else if (e.key === 'ArrowLeft') {
+            if (i > 0) goTo(STATES[i - 1]);
+          }
+        });
+        document.getElementById('dev-skip').addEventListener('click', () => {
+          if (state === 'scan') goTo('bee');
+        });
+      }
+
+      /* HTTPS guard ---------------------------------------------- */
+      if (
+        location.protocol !== 'https:' &&
+        location.hostname !== 'localhost' &&
+        location.hostname !== '127.0.0.1'
+      ) {
+        const warn = document.createElement('div');
+        warn.style.cssText =
+          'position:fixed;top:0;left:0;right:0;padding:.6rem 1rem;background:#7a2418;color:#fff;font:600 .75rem system-ui;z-index:999;text-align:center;letter-spacing:.06em;';
+        warn.textContent = 'WebAR needs HTTPS — open this page over https:// or localhost.';
+        document.body.appendChild(warn);
+      }
+    </script>
+  </body>
+</html>
