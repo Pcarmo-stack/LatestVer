@@ -126,12 +126,14 @@
       }
       .intro-bg {
         position: absolute;
-        inset: 0;
-        background-image: url('./assets/landscape.jpg');
+        inset: -8% -6%;
+        background-image: url('./assets/village-bg.png');
         background-size: cover;
-        background-position: center;
-        filter: brightness(0.78) saturate(1.05);
+        background-position: center top;
+        filter: brightness(0.85) saturate(1.05);
         z-index: 0;
+        will-change: transform;
+        transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
       }
       .intro-bg::after {
         content: '';
@@ -139,12 +141,23 @@
         inset: 0;
         background: linear-gradient(
           to bottom,
-          rgba(20, 14, 8, 0.92) 0%,
-          rgba(20, 14, 8, 0.55) 32%,
-          rgba(20, 14, 8, 0.25) 55%,
-          rgba(20, 14, 8, 0.45) 78%,
-          rgba(20, 14, 8, 0.85) 100%
+          rgba(20, 14, 8, 0.55) 0%,
+          rgba(20, 14, 8, 0.18) 32%,
+          rgba(20, 14, 8, 0.10) 55%,
+          rgba(20, 14, 8, 0.55) 82%,
+          rgba(20, 14, 8, 0.92) 100%
         );
+      }
+      /* Parallax mid-layer (silhouette over background for depth) */
+      .intro-mist {
+        position: absolute;
+        inset: -4%;
+        background: radial-gradient(ellipse at 50% 90%, rgba(228,128,67,0.22) 0%, rgba(228,128,67,0) 60%),
+                    radial-gradient(ellipse at 50% 5%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 50%);
+        z-index: 0;
+        pointer-events: none;
+        will-change: transform;
+        transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
       }
       .intro-inner {
         position: relative;
@@ -163,35 +176,36 @@
         display: flex;
         align-items: center;
         gap: 0.4rem;
-        color: var(--magenta);
-        font-size: 1.4rem;
-        opacity: 0.9;
+        color: #fff;
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding: 0.4rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(20,14,8,0.45);
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,0.18);
+        cursor: pointer;
+        transition: transform var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+        user-select: none;
       }
+      .intro-langbar:active { transform: scale(0.96); }
       .intro-langbar .flag {
-        font-size: 1.4rem;
+        font-size: 1.1rem;
         line-height: 1;
-      }
-      .intro-langbar .caret {
-        width: 14px;
-        height: 14px;
-        stroke: var(--magenta);
-        fill: none;
-        stroke-width: 2.5;
       }
       .intro-logo {
-        width: 64px;
-        height: 64px;
-        margin-top: 1rem;
-        border-radius: 50%;
-        background: radial-gradient(circle at 50% 45%, #fff 0%, #f3e2c8 60%, #cfa377 100%);
+        width: 128px;
+        height: 128px;
+        margin-top: 0.4rem;
         display: grid;
         place-items: center;
-        font-size: 2rem;
-        line-height: 1;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.4);
         position: relative;
+        filter: drop-shadow(0 6px 22px rgba(0,0,0,0.55));
+        will-change: transform;
+        transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
       }
-      .intro-logo svg { width: 56px; height: 56px; }
+      .intro-logo img { width: 100%; height: 100%; object-fit: contain; }
       .intro-title {
         margin: 0.9rem 0 0.7rem;
         font-family: var(--font-display);
@@ -564,14 +578,44 @@
         height: 100%;
         overflow: hidden;
       }
-      .map-svg {
+      .map-img {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
+        object-fit: cover;
+        object-position: center;
+        user-select: none;
+        -webkit-user-drag: none;
+        pointer-events: none;
       }
-      .map-svg .ocean { fill: var(--map-bg); }
-      .map-svg .land  { fill: var(--map-land); stroke: rgba(80,55,30,0.18); stroke-width: 0.5; }
+      /* "You are here" pulse pin */
+      .here-pin {
+        position: absolute;
+        width: 24px; height: 24px;
+        margin-left: -12px; margin-top: -12px;
+        z-index: 3;
+        pointer-events: none;
+      }
+      .here-pin::before, .here-pin::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+      }
+      .here-pin::before {
+        background: var(--magenta);
+        box-shadow: 0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,0.3);
+        transform: scale(0.45);
+      }
+      .here-pin::after {
+        background: rgba(200,67,138,0.4);
+        animation: here-pulse 1.8s ease-out infinite;
+      }
+      @keyframes here-pulse {
+        0%   { transform: scale(0.5); opacity: 0.6; }
+        100% { transform: scale(1.8); opacity: 0;   }
+      }
 
       /* Country label hints (small) */
       .map-label {
@@ -622,6 +666,11 @@
       }
       .trace-pin:active { transform: scale(0.9); }
       .trace-pin.is-mine { box-shadow: 0 0 0 3px var(--magenta), 0 6px 14px rgba(0,0,0,0.3); }
+      .trace-pin.locked {
+        background: rgba(255,255,255,0.55);
+        color: rgba(40,28,14,0.5);
+        font-size: 0.95rem;
+      }
 
       /* Trace bubble (quote callout) */
       .trace-bubble {
@@ -806,6 +855,102 @@
         box-shadow: 0 4px 10px rgba(0,0,0,0.18);
       }
 
+      /* ==========================================================
+         COMMUNITY OVERLAY
+         ========================================================== */
+      .community-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 300;
+        background: rgba(20,14,8,0.6);
+        backdrop-filter: blur(8px);
+        display: grid;
+        place-items: center;
+        padding: 1.4rem;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--t-med) var(--ease);
+      }
+      .community-overlay.is-on {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .community-overlay[hidden] { display: none; }
+      .community-card {
+        position: relative;
+        width: min(86vw, 360px);
+        background: var(--paper);
+        border-radius: 26px;
+        padding: 2.4rem 1.6rem 1.6rem;
+        text-align: center;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+        transform: translateY(18px) scale(0.96);
+        transition: transform var(--t-slow) var(--ease-out);
+      }
+      .community-overlay.is-on .community-card {
+        transform: translateY(0) scale(1);
+      }
+      .community-badge {
+        position: absolute;
+        top: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60px; height: 60px;
+        background: var(--orange);
+        color: #fff;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 1.8rem;
+        box-shadow: 0 8px 18px rgba(228,128,67,0.45);
+      }
+      .community-close {
+        position: absolute;
+        top: 10px; right: 12px;
+        font-size: 1rem;
+        color: var(--ink-soft);
+        padding: 0.3rem 0.5rem;
+        line-height: 1;
+      }
+      .community-title {
+        margin: 0.4rem 0 0.7rem;
+        font-family: var(--font-display);
+        font-size: 1.6rem;
+        letter-spacing: 0.08em;
+        color: var(--ink);
+      }
+      .community-body {
+        margin: 0 0 1.4rem;
+        font-style: italic;
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.45;
+        color: var(--ink-soft);
+      }
+      .community-actions {
+        display: flex;
+        gap: 0.6rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .community-btn {
+        padding: 0.85rem 1.4rem;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        transition: transform var(--t-fast) var(--ease);
+      }
+      .community-btn:active { transform: scale(0.97); }
+      .community-btn--solid {
+        background: var(--magenta);
+        color: #fff;
+        box-shadow: 0 8px 18px rgba(200,67,138,0.4);
+      }
+      .community-btn--ghost {
+        background: transparent;
+        color: var(--ink-soft);
+      }
+
       /* Toast for "trace added" */
       .toast {
         position: fixed;
@@ -868,53 +1013,42 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false">
+        <a-entity
+          cursor="rayOrigin: mouse; fuse: false"
+          raycaster="objects: .bee-clickable; far: 50"
+        ></a-entity>
+      </a-camera>
       <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
       <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
 
-      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-        <!-- Bee model: positioned just above the can, scaled small.
-             flight-orbit slowly circles + bobs the bee.
-             animation-mixer plays the bundled flying loop. -->
-        <a-entity
-          id="bee-entity"
-          gltf-model="#bee-model"
-          position="0 0.05 0.05"
-          rotation="0 0 0"
-          scale="0.18 0.18 0.18"
-          animation-mixer="clip: *; loop: repeat"
-          flight-orbit="radius: 0.32; speed: 0.6; bobAmp: 0.05; bobSpeed: 1.6"
-        ></a-entity>
-      </a-entity>
+      <!-- Marker target used purely as a trigger; nothing is parented here so
+           the bees do NOT track the can. -->
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
+
+      <!-- Bee swarm lives in world/camera space, not on the target. -->
+      <a-entity id="bee-swarm"></a-entity>
     </a-scene>
 
     <!-- ============================================================
          STATE 1 · INTRO / MAIN MENU
          ============================================================ -->
     <section id="screen-intro" class="screen is-active">
-      <div class="intro-bg"></div>
+      <div class="intro-bg" id="intro-bg"></div>
+      <div class="intro-mist" id="intro-mist"></div>
       <div class="intro-inner">
-        <div class="intro-langbar" aria-label="Language">
-          <span class="flag" aria-hidden="true">🇬🇧</span>
-          <svg class="caret" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <button class="intro-langbar" id="lang-toggle" aria-label="Toggle language" type="button">
+          <span class="flag" aria-hidden="true" id="lang-flag">🇬🇧</span>
+          <span id="lang-code">EN</span>
+        </button>
+
+        <div class="intro-logo" id="intro-logo" aria-hidden="true">
+          <img src="./assets/logo.png" alt="Cervecería de Zarra" />
         </div>
 
-        <div class="intro-logo" aria-hidden="true">
-          <!-- bull-head bottle-cap mark -->
-          <svg viewBox="0 0 64 64" fill="none">
-            <circle cx="32" cy="32" r="28" fill="#f4e1c5" stroke="#3b2412" stroke-width="2"/>
-            <path d="M14 30c0-6 4-10 8-12-2 4-1 8 2 10" stroke="#3b2412" stroke-width="2" stroke-linecap="round"/>
-            <path d="M50 30c0-6-4-10-8-12 2 4 1 8-2 10" stroke="#3b2412" stroke-width="2" stroke-linecap="round"/>
-            <path d="M20 30c4 8 8 14 12 14s8-6 12-14" stroke="#3b2412" stroke-width="2" stroke-linecap="round" fill="#3b2412"/>
-            <circle cx="26" cy="32" r="1.6" fill="#f4e1c5"/>
-            <circle cx="38" cy="32" r="1.6" fill="#f4e1c5"/>
-            <path d="M28 42c2 1.5 6 1.5 8 0" stroke="#E48043" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </div>
-
-        <h1 class="intro-title">CERVECERIA DE ZARRA</h1>
-        <p class="intro-tagline">Beer. Land. People.</p>
-        <p class="intro-desc">
+        <h1 class="intro-title" data-i18n="title">CERVECERIA DE ZARRA</h1>
+        <p class="intro-tagline" data-i18n="tagline">Beer, Land and People</p>
+        <p class="intro-desc" data-i18n="desc">
           Based on the Spanish tradition of La Sobremesa –
           time spent chatting and connecting after a meal,
           this time your beer!
@@ -922,7 +1056,7 @@
 
         <div class="intro-spacer"></div>
 
-        <button class="intro-cta" id="start-btn">Start Experience</button>
+        <button class="intro-cta" id="start-btn" data-i18n="cta">Start Experience</button>
       </div>
     </section>
 
@@ -938,11 +1072,11 @@
             <circle cx="12" cy="13" r="3.6"/>
           </svg>
         </div>
-        <h2 class="perm-title">CAMERA ACCESS</h2>
-        <p class="perm-body">zarra.cervesa wants to use your camera<br/>to bring smth to live</p>
+        <h2 class="perm-title" data-i18n="permTitle">CAMERA ACCESS</h2>
+        <p class="perm-body" data-i18n="permBody">zarra.cervesa wants to use your camera<br/>to bring something to life</p>
         <div class="perm-actions">
-          <button class="perm-btn perm-btn--ghost" id="perm-deny">Not Now</button>
-          <button class="perm-btn perm-btn--solid" id="perm-allow">Allow</button>
+          <button class="perm-btn perm-btn--ghost" id="perm-deny" data-i18n="permDeny">Not Now</button>
+          <button class="perm-btn perm-btn--solid" id="perm-allow" data-i18n="permAllow">Allow</button>
         </div>
       </div>
     </section>
@@ -954,8 +1088,8 @@
       <div class="scan-frame">
         <i></i><i></i>
         <div class="scan-hint">
-          Find the can
-          <em>Frame it within</em>
+          <span data-i18n="scanFind">Find the can</span>
+          <em data-i18n="scanFrame">Frame it within</em>
         </div>
       </div>
       <button class="dev-skip" id="dev-skip">Skip detect →</button>
@@ -965,8 +1099,8 @@
          STATE 4 · BEE (AR overlay UI)
          ============================================================ -->
     <section id="screen-bee" class="screen">
-      <p class="bee-msg">A little visitor…</p>
-      <button class="bee-cta" id="bee-cta">Continue</button>
+      <p class="bee-msg" data-i18n="beeMsg">Catch the golden bee…</p>
+      <button class="bee-cta" id="bee-cta" data-i18n="beeCta" hidden>Continue</button>
     </section>
 
     <!-- ============================================================
@@ -988,10 +1122,10 @@
       <button class="profile-back" id="profile-back" aria-label="Back">‹</button>
 
       <div class="profile-card">
-        <h2 class="profile-title">TELL US ABOUT<br/>YOURSELF</h2>
+        <h2 class="profile-title" data-i18n="profTitle">TELL US ABOUT<br/>YOURSELF</h2>
 
         <div class="profile-field">
-          <label class="profile-label" for="country">Select your country</label>
+          <label class="profile-label" for="country" data-i18n="profCountry">Select your country</label>
           <select id="country" name="country">
             <option value="NL" data-flag="🇳🇱">🇳🇱 The Netherlands</option>
             <option value="ES" data-flag="🇪🇸">🇪🇸 Spain</option>
@@ -1013,12 +1147,12 @@
         </div>
 
         <div class="profile-field">
-          <label class="profile-label" for="name">Your name</label>
+          <label class="profile-label" for="name" data-i18n="profName">Your name</label>
           <input id="name" name="name" type="text" placeholder="Sara" autocomplete="given-name" />
         </div>
       </div>
 
-      <button class="profile-continue" id="profile-continue" disabled>Continue</button>
+      <button class="profile-continue" id="profile-continue" data-i18n="profContinue" disabled>Continue</button>
     </section>
 
     <!-- ============================================================
@@ -1028,74 +1162,15 @@
       <button class="map-back" id="map-back" aria-label="Restart">↺</button>
 
       <div class="flavor-strip" id="flavor-strip">
-        <div class="flavor-chip"><span class="pip">🍊</span><span>ALBA · Orange Wheat</span></div>
-        <div class="flavor-chip locked"><span class="pip">🔒</span><span>Locked</span></div>
-        <div class="flavor-chip locked"><span class="pip">🔒</span><span>Locked</span></div>
+        <div class="flavor-chip"><span class="pip">🍊</span><span data-i18n="flavorOrange">ALBA · Orange Wheat</span></div>
+        <div class="flavor-chip locked"><span class="pip">🔒</span><span data-i18n="locked">Locked</span></div>
+        <div class="flavor-chip locked"><span class="pip">🔒</span><span data-i18n="locked">Locked</span></div>
       </div>
 
       <div class="map-wrap" id="map-wrap">
-        <!-- Stylised world map (low-detail blobs) -->
-        <svg
-          class="map-svg"
-          viewBox="0 0 1000 600"
-          preserveAspectRatio="xMidYMid slice"
-          aria-hidden="true"
-        >
-          <rect class="ocean" x="0" y="0" width="1000" height="600"/>
-          <!-- North America -->
-          <path class="land" d="M70 120 Q90 80 160 75 Q230 70 270 90 Q310 110 330 100 Q360 90 380 110 Q400 130 380 170 Q360 210 320 240 Q300 280 270 300 Q230 320 200 310 Q170 295 150 255 Q130 220 100 200 Q70 175 70 120 Z"/>
-          <!-- Greenland -->
-          <path class="land" d="M380 60 Q420 50 430 80 Q435 110 415 130 Q395 145 380 130 Q365 105 380 60 Z"/>
-          <!-- Central + Caribbean -->
-          <path class="land" d="M230 320 Q255 330 270 350 Q280 370 260 380 Q240 380 220 365 Q205 350 230 320 Z"/>
-          <!-- South America -->
-          <path class="land" d="M275 360 Q310 360 330 390 Q355 430 360 480 Q355 525 325 555 Q295 575 275 555 Q255 520 260 470 Q260 420 275 360 Z"/>
-          <!-- Europe -->
-          <path class="land" d="M470 130 Q495 110 535 115 Q570 120 590 145 Q605 170 585 195 Q560 215 520 215 Q485 210 470 190 Q460 165 470 130 Z"/>
-          <!-- Africa -->
-          <path class="land" d="M490 230 Q540 220 580 240 Q610 260 615 300 Q610 350 590 390 Q560 430 525 440 Q495 435 480 400 Q465 360 470 320 Q475 270 490 230 Z"/>
-          <!-- Middle East / Asia -->
-          <path class="land" d="M600 160 Q660 145 730 160 Q790 170 830 200 Q860 230 855 270 Q830 295 790 295 Q740 290 690 280 Q640 270 620 240 Q605 210 600 160 Z"/>
-          <!-- India -->
-          <path class="land" d="M720 280 Q745 285 755 320 Q755 350 735 360 Q715 355 710 325 Q708 300 720 280 Z"/>
-          <!-- SE Asia / Indonesia -->
-          <path class="land" d="M810 300 Q860 305 880 335 Q880 365 855 375 Q825 370 810 345 Q800 320 810 300 Z"/>
-          <!-- Australia -->
-          <path class="land" d="M830 410 Q880 405 915 425 Q940 450 925 475 Q890 490 850 480 Q820 465 825 440 Q827 420 830 410 Z"/>
-          <!-- New Zealand -->
-          <path class="land" d="M945 480 Q955 485 955 500 Q945 510 938 500 Q935 488 945 480 Z"/>
-          <!-- Japan -->
-          <path class="land" d="M895 235 Q910 225 915 245 Q910 265 895 260 Q885 250 895 235 Z"/>
-          <!-- UK -->
-          <path class="land" d="M455 145 Q467 140 470 155 Q468 170 458 170 Q448 162 455 145 Z"/>
-          <!-- Madagascar -->
-          <path class="land" d="M625 380 Q636 380 638 400 Q635 420 625 418 Q616 405 625 380 Z"/>
-        </svg>
+        <img class="map-img" src="./assets/world-map.png" alt="" draggable="false" />
 
-        <!-- map-label positions are in % of map-wrap -->
-        <span class="map-label" style="left: 12%; top: 28%;">CANADA</span>
-        <span class="map-label" style="left: 18%; top: 38%;">USA</span>
-        <span class="map-label" style="left: 27%; top: 64%;">PERU</span>
-        <span class="map-label" style="left: 31%; top: 75%;">BOLIVIA</span>
-        <span class="map-label" style="left: 30%; top: 88%;">ARGENTINA</span>
-        <span class="map-label" style="left: 49%; top: 26%;">UK</span>
-        <span class="map-label" style="left: 51%; top: 33%;">FRANCE</span>
-        <span class="map-label" style="left: 56%; top: 32%;">GERMANY</span>
-        <span class="map-label" style="left: 52%; top: 41%;">SPAIN</span>
-        <span class="map-label" style="left: 58%; top: 43%;">ITALY</span>
-        <span class="map-label" style="left: 60%; top: 55%;">ALGERIA</span>
-        <span class="map-label" style="left: 65%; top: 56%;">LIBYA</span>
-        <span class="map-label" style="left: 70%; top: 53%;">EGYPT</span>
-        <span class="map-label" style="left: 67%; top: 70%;">CHAD</span>
-        <span class="map-label" style="left: 60%; top: 68%;">NIGERIA</span>
-        <span class="map-label" style="left: 80%; top: 47%;">SAUDI ARABIA</span>
-        <span class="map-label" style="left: 80%; top: 52%;">IRAQ</span>
-        <span class="map-label" style="left: 76%; top: 42%;">TURKEY</span>
-        <span class="map-label" style="left: 86%; top: 60%;">INDIA</span>
-        <span class="map-label" style="left: 87%; top: 80%;">AUSTRALIA</span>
-
-        <!-- Wandering bees + traces injected by JS -->
-        <div id="map-bees"></div>
+        <!-- Traces injected by JS -->
         <div id="map-traces"></div>
 
         <!-- The single popup bubble (re-used for whichever pin is tapped) -->
@@ -1113,42 +1188,97 @@
 
       <div class="trace-panel">
         <div class="trace-bee-badge" aria-hidden="true">🐝</div>
-        <h3 class="trace-title">LEAVE YOUR TRACE…</h3>
+        <h3 class="trace-title" data-i18n="traceTitle">LEAVE YOUR TRACE…</h3>
         <div class="trace-input-row">
-          <input id="trace-input" type="text" placeholder="type here …" maxlength="120" />
-          <button class="trace-send" id="trace-send" disabled>Send</button>
+          <input id="trace-input" type="text" data-i18n-placeholder="tracePlaceholder" placeholder="type here …" maxlength="120" />
+          <button class="trace-send" id="trace-send" data-i18n="traceSend" disabled>Send</button>
         </div>
       </div>
     </section>
 
-    <div class="toast" id="toast">Your trace is on the map ✦</div>
+    <!-- ============================================================
+         JOIN THE COMMUNITY  (overlay after first trace)
+         ============================================================ -->
+    <div class="community-overlay" id="community-overlay" hidden>
+      <div class="community-card">
+        <button class="community-close" id="community-close" aria-label="Close">✕</button>
+        <div class="community-badge">🐝</div>
+        <h3 class="community-title" data-i18n="commTitle">JOIN THE COMMUNITY</h3>
+        <p class="community-body" data-i18n="commBody">
+          Be the first to taste new flavors, hear stories from the brewery,
+          and meet other people who left a trace.
+        </p>
+        <div class="community-actions">
+          <button class="community-btn community-btn--solid" id="community-join" data-i18n="commJoin">Join</button>
+          <button class="community-btn community-btn--ghost" id="community-later" data-i18n="commLater">Maybe later</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" data-i18n="toast">Your trace is on the map ✦</div>
     <button class="restart-btn" id="restart-btn" title="Restart">↺</button>
 
     <script>
       /* ============================================================
-         FLIGHT-ORBIT — gently orbits + bobs the bee around the can
+         FREE-FLY — bees wander through a Lissajous path in front of
+         the camera so they appear to roam the screen, independent of
+         any image marker.
          ============================================================ */
-      AFRAME.registerComponent('flight-orbit', {
+      AFRAME.registerComponent('free-fly', {
         schema: {
-          radius:   { default: 0.3 },
-          speed:    { default: 0.6 },   // radians/sec
-          bobAmp:   { default: 0.05 },
-          bobSpeed: { default: 1.6 },
+          centerX:  { default: 0 },
+          centerY:  { default: 0 },
+          centerZ:  { default: -1.6 },
+          ampX:     { default: 0.9 },
+          ampY:     { default: 0.55 },
+          ampZ:     { default: 0.35 },
+          speedX:   { default: 0.6 },
+          speedY:   { default: 0.75 },
+          speedZ:   { default: 0.4 },
+          phaseX:   { default: 0 },
+          phaseY:   { default: 0 },
+          phaseZ:   { default: 0 },
         },
         init: function () {
-          this.t0 = 0;
-          this.origin = { x: 0, y: 0.05, z: 0.05 };
+          this.t = Math.random() * 8;
+          this._prev = new THREE.Vector3();
         },
         tick: function (time, dt) {
-          this.t0 += (dt || 0) / 1000;
+          if (!dt) return;
+          this.t += dt / 1000;
           const d = this.data;
-          const a = this.t0 * d.speed;
-          const x = this.origin.x + Math.cos(a) * d.radius;
-          const z = this.origin.z + Math.sin(a) * d.radius * 0.4;
-          const y = this.origin.y + Math.sin(this.t0 * d.bobSpeed) * d.bobAmp;
-          this.el.object3D.position.set(x, y, z);
+          const x = d.centerX + Math.sin(this.t * d.speedX + d.phaseX) * d.ampX;
+          const y = d.centerY + Math.sin(this.t * d.speedY + d.phaseY) * d.ampY;
+          const z = d.centerZ + Math.sin(this.t * d.speedZ + d.phaseZ) * d.ampZ;
+          const pos = this.el.object3D.position;
           // face direction of motion
-          this.el.object3D.rotation.y = -a + Math.PI / 2;
+          const dx = x - pos.x;
+          const dz = z - pos.z;
+          if (Math.abs(dx) > 1e-4 || Math.abs(dz) > 1e-4) {
+            this.el.object3D.rotation.y = Math.atan2(dx, dz);
+          }
+          pos.set(x, y, z);
+        },
+      });
+
+      /* Tint the gold bee’s GLTF materials once loaded. */
+      AFRAME.registerComponent('gold-tint', {
+        init: function () {
+          this.el.addEventListener('model-loaded', () => {
+            const mesh = this.el.getObject3D('mesh');
+            if (!mesh) return;
+            mesh.traverse((node) => {
+              if (node.isMesh && node.material) {
+                const mat = node.material.clone();
+                mat.color = new THREE.Color('#f6c233');
+                if ('emissive' in mat) mat.emissive = new THREE.Color('#7a5500');
+                if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.6;
+                if ('metalness' in mat) mat.metalness = 0.85;
+                if ('roughness' in mat) mat.roughness = 0.25;
+                node.material = mat;
+              }
+            });
+          });
         },
       });
 
@@ -1160,6 +1290,7 @@
       const body = document.body;
       const scene = document.querySelector('a-scene');
       const target0 = document.getElementById('target-0');
+      const beeSwarm = document.getElementById('bee-swarm');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1170,7 +1301,199 @@
         body.dataset.state = next;
         state = next;
         if (next === 'map') renderMap();
+        if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
+
+      /* ============================================================
+         I18N — EN / ES toggle
+         ============================================================ */
+      const I18N = {
+        en: {
+          title: 'CERVECERIA DE ZARRA',
+          tagline: 'Beer, Land and People',
+          desc: 'Based on the Spanish tradition of La Sobremesa – time spent chatting and connecting after a meal, this time your beer!',
+          cta: 'Start Experience',
+          permTitle: 'CAMERA ACCESS',
+          permBody: 'zarra.cervesa wants to use your camera<br/>to bring something to life',
+          permDeny: 'Not Now',
+          permAllow: 'Allow',
+          scanFind: 'Find the can',
+          scanFrame: 'Frame it within',
+          beeMsg: 'Catch the golden bee…',
+          beeCta: 'Continue',
+          profTitle: 'TELL US ABOUT<br/>YOURSELF',
+          profCountry: 'Select your country',
+          profName: 'Your name',
+          profContinue: 'Continue',
+          flavorOrange: 'ALBA · Orange Wheat',
+          locked: 'Locked',
+          traceTitle: 'LEAVE YOUR TRACE…',
+          tracePlaceholder: 'type here …',
+          traceSend: 'Send',
+          toast: 'Your trace is on the map ✦',
+          commTitle: 'JOIN THE COMMUNITY',
+          commBody: 'Be the first to taste new flavors, hear stories from the brewery, and meet other people who left a trace.',
+          commJoin: 'Join',
+          commLater: 'Maybe later',
+        },
+        es: {
+          title: 'CERVECERIA DE ZARRA',
+          tagline: 'Cerveza, Tierra y Gente',
+          desc: 'Basado en la tradición española de La Sobremesa – tiempo dedicado a charlar y conectar después de una comida, ¡esta vez con tu cerveza!',
+          cta: 'Comenzar Experiencia',
+          permTitle: 'ACCESO A LA CÁMARA',
+          permBody: 'zarra.cervesa quiere usar tu cámara<br/>para dar vida a algo',
+          permDeny: 'Ahora No',
+          permAllow: 'Permitir',
+          scanFind: 'Encuentra la lata',
+          scanFrame: 'Encuádrala dentro',
+          beeMsg: 'Atrapa la abeja dorada…',
+          beeCta: 'Continuar',
+          profTitle: 'CUÉNTANOS<br/>SOBRE TI',
+          profCountry: 'Selecciona tu país',
+          profName: 'Tu nombre',
+          profContinue: 'Continuar',
+          flavorOrange: 'ALBA · Trigo Naranja',
+          locked: 'Bloqueado',
+          traceTitle: 'DEJA TU HUELLA…',
+          tracePlaceholder: 'escribe aquí…',
+          traceSend: 'Enviar',
+          toast: 'Tu huella está en el mapa ✦',
+          commTitle: 'ÚNETE A LA COMUNIDAD',
+          commBody: 'Sé el primero en probar nuevos sabores, escuchar historias de la cervecería y conocer a otras personas que dejaron una huella.',
+          commJoin: 'Unirme',
+          commLater: 'Quizás más tarde',
+        },
+      };
+      let lang = (localStorage.getItem('zarra:lang') || 'en');
+      function applyLang() {
+        const dict = I18N[lang] || I18N.en;
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          const k = el.getAttribute('data-i18n');
+          if (dict[k] !== undefined) el.innerHTML = dict[k];
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+          const k = el.getAttribute('data-i18n-placeholder');
+          if (dict[k] !== undefined) el.setAttribute('placeholder', dict[k]);
+        });
+        document.getElementById('lang-code').textContent = lang.toUpperCase();
+        document.getElementById('lang-flag').textContent = lang === 'es' ? '🇪🇸' : '🇬🇧';
+        document.documentElement.lang = lang;
+      }
+      document.getElementById('lang-toggle').addEventListener('click', () => {
+        lang = (lang === 'en') ? 'es' : 'en';
+        localStorage.setItem('zarra:lang', lang);
+        applyLang();
+        sfx('click');
+        haptic([20]);
+      });
+      applyLang();
+
+      /* ============================================================
+         PARALLAX — device tilt with pointer fallback
+         ============================================================ */
+      const introBg   = document.getElementById('intro-bg');
+      const introMist = document.getElementById('intro-mist');
+      const introLogo = document.getElementById('intro-logo');
+      function applyParallax(nx, ny) {
+        // nx,ny in [-1,1]
+        const bx = nx * -14, by = ny * -10;
+        const mx = nx * -28, my = ny * -18;
+        const lx = nx *  10, ly = ny *  6;
+        introBg.style.transform   = `translate3d(${bx}px, ${by}px, 0) scale(1.06)`;
+        introMist.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
+        introLogo.style.transform = `translate3d(${lx}px, ${ly}px, 0)`;
+      }
+      window.addEventListener('pointermove', (e) => {
+        if (state !== 'intro') return;
+        const nx = (e.clientX / window.innerWidth)  * 2 - 1;
+        const ny = (e.clientY / window.innerHeight) * 2 - 1;
+        applyParallax(nx, ny);
+      });
+      window.addEventListener('deviceorientation', (e) => {
+        if (state !== 'intro') return;
+        const nx = Math.max(-1, Math.min(1, (e.gamma || 0) / 30));
+        const ny = Math.max(-1, Math.min(1, (e.beta  || 0) / 45));
+        applyParallax(nx, ny);
+      });
+
+      /* ============================================================
+         SFX — WebAudio-generated tones (no asset files needed)
+         ============================================================ */
+      let audioCtx = null;
+      function ensureAudio() {
+        if (audioCtx) return audioCtx;
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (_) { audioCtx = null; }
+        return audioCtx;
+      }
+      function tone({ freq = 440, dur = 0.18, type = 'sine', gain = 0.18, sweep = 0, attack = 0.01 } = {}) {
+        const ctx = ensureAudio();
+        if (!ctx) return;
+        const t0 = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t0);
+        if (sweep) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + sweep), t0 + dur);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.02);
+      }
+      let buzzNodes = null;
+      function startBuzz() {
+        const ctx = ensureAudio();
+        if (!ctx || buzzNodes) return;
+        const osc = ctx.createOscillator();
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        const g = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 180;
+        lfo.frequency.value = 22;
+        lfoGain.gain.value = 25;
+        lfo.connect(lfoGain).connect(osc.frequency);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.25);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(); lfo.start();
+        buzzNodes = { osc, lfo, g };
+      }
+      function stopBuzz() {
+        if (!buzzNodes) return;
+        const ctx = ensureAudio();
+        const { osc, lfo, g } = buzzNodes;
+        try {
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+          osc.stop(ctx.currentTime + 0.3);
+          lfo.stop(ctx.currentTime + 0.3);
+        } catch (_) {}
+        buzzNodes = null;
+      }
+      function sfx(name) {
+        switch (name) {
+          case 'click':   return tone({ freq: 520, dur: 0.08, type: 'triangle', gain: 0.12, sweep: -120 });
+          case 'success': tone({ freq: 660, dur: 0.12, type: 'sine', gain: 0.18 });
+                          setTimeout(() => tone({ freq: 880, dur: 0.18, type: 'sine', gain: 0.18 }), 110);
+                          return;
+          case 'gold':    tone({ freq: 880, dur: 0.10, type: 'triangle', gain: 0.2 });
+                          setTimeout(() => tone({ freq: 1175, dur: 0.10, type: 'triangle', gain: 0.2 }), 80);
+                          setTimeout(() => tone({ freq: 1480, dur: 0.20, type: 'triangle', gain: 0.2 }), 160);
+                          return;
+          case 'send':    return tone({ freq: 740, dur: 0.20, type: 'sine', gain: 0.18, sweep: 200 });
+          case 'pop':     return tone({ freq: 320, dur: 0.10, type: 'square', gain: 0.10, sweep: 240 });
+        }
+      }
+      // Wire generic button clicks for a soft "click" sound
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('button, .intro-cta, .trace-pin, .flavor-chip')) {
+          if (!buzzNodes) sfx('click');
+        }
+      }, true);
 
       /* ============================================================
          MIND-AR START — happens after user taps Allow
@@ -1217,17 +1540,82 @@
 
       /* ============================================================
          SCAN → BEE (target detection)
+         The bees are NOT parented to the marker — finding the can
+         simply triggers the swarm to spawn in screen space.
          ============================================================ */
+      let swarmSpawned = false;
       target0.addEventListener('targetFound', () => {
         if (state === 'scan') {
           haptic([80, 60, 140]);
+          spawnSwarm();
           goTo('bee');
         }
       });
 
+      function clearSwarm() {
+        swarmSpawned = false;
+        while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
+        stopBuzz();
+      }
+
+      function spawnSwarm() {
+        if (swarmSpawned) return;
+        swarmSpawned = true;
+        startBuzz();
+        sfx('pop');
+
+        // 5 regular bees with varied scale + flight params + 1 gold bee
+        const configs = [
+          { scale: 0.20, gold: false, ampX: 1.1, ampY: 0.6, ampZ: 0.3, speedX: 0.55, speedY: 0.7, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerZ: -1.7 },
+          { scale: 0.14, gold: false, ampX: 0.8, ampY: 0.5, ampZ: 0.25,speedX: 0.85, speedY: 1.0, speedZ: 0.5,  phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerZ: -1.4 },
+          { scale: 0.10, gold: false, ampX: 1.3, ampY: 0.7, ampZ: 0.35,speedX: 1.1,  speedY: 0.55,speedZ: 0.7,  phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerZ: -1.9 },
+          { scale: 0.17, gold: false, ampX: 0.7, ampY: 0.45,ampZ: 0.22,speedX: 0.45, speedY: 0.9, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerZ: -1.3 },
+          { scale: 0.12, gold: false, ampX: 1.0, ampY: 0.65,ampZ: 0.3, speedX: 0.75, speedY: 0.6, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerZ: -1.6 },
+          // GOLD bee — slightly larger, more central
+          { scale: 0.22, gold: true,  ampX: 0.9, ampY: 0.5, ampZ: 0.3, speedX: 0.5,  speedY: 0.7, speedZ: 0.4,  phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerZ: -1.5 },
+        ];
+        configs.forEach((c) => {
+          const el = document.createElement('a-entity');
+          el.setAttribute('gltf-model', '#bee-model');
+          el.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
+          el.setAttribute('animation-mixer', 'clip: *; loop: repeat');
+          el.setAttribute('free-fly',
+            `ampX: ${c.ampX}; ampY: ${c.ampY}; ampZ: ${c.ampZ}; ` +
+            `speedX: ${c.speedX}; speedY: ${c.speedY}; speedZ: ${c.speedZ}; ` +
+            `phaseX: ${c.phaseX}; phaseY: ${c.phaseY}; phaseZ: ${c.phaseZ}; ` +
+            `centerZ: ${c.centerZ}`
+          );
+          el.classList.add('bee-clickable');
+          if (c.gold) {
+            el.setAttribute('gold-tint', '');
+            el.id = 'bee-gold';
+            el.addEventListener('click', onGoldBeeClicked);
+          }
+          beeSwarm.appendChild(el);
+        });
+
+        // Fallback: even without the raycaster catching the gold bee,
+        // tapping the on-screen "Continue" advances after a few seconds.
+        setTimeout(() => {
+          const cta = document.getElementById('bee-cta');
+          if (state === 'bee') cta.hidden = false;
+        }, 4500);
+      }
+
+      async function onGoldBeeClicked(e) {
+        if (e) e.preventDefault();
+        if (state !== 'bee') return;
+        haptic([40, 30, 80]);
+        sfx('gold');
+        await stopMindAR();
+        clearSwarm();
+        goTo('profile');
+      }
+
       document.getElementById('bee-cta').addEventListener('click', async () => {
         haptic([60]);
         await stopMindAR();
+        clearSwarm();
         goTo('profile');
       });
 
@@ -1268,54 +1656,97 @@
           flag: selectedOpt.dataset.flag || '🌍',
         };
         localStorage.setItem('zarra:profile', JSON.stringify(profile));
+        // Kick off geolocation (async, optional)
+        requestGeolocation(profile);
         goTo('map');
       });
 
       /* ============================================================
+         GEOLOCATION → "you are here" pin on the map
+         Falls back to profile country if denied / unavailable.
+         ============================================================ */
+      function latLngToPercent(lat, lng) {
+        // The world-map.png is a stylised non-rectangular layout. These
+        // calibration values tune a linear projection to roughly land on
+        // the painted continents.
+        // Image samples (approx, eyeballed on the painted PNG):
+        //   Spain (40°N, -4°E)   ~ ( 46%, 42% )
+        //   Argentina (-35°, -65°) ~ ( 33%, 65% )
+        //   Japan (36°N, 138°E)   ~ ( 88%, 35% )
+        //   Australia (-25°, 134°E) ~ ( 82%, 78% )
+        //   USA (38°N, -100°W)    ~ ( 22%, 28% )
+        // Linear fit: x = 50 + lng * 0.28,  y = 45 - lat * 0.55
+        const x = 50 + lng * 0.28;
+        const y = 45 - lat * 0.55;
+        return {
+          x: Math.max(2, Math.min(98, x)),
+          y: Math.max(4, Math.min(94, y)),
+        };
+      }
+      function requestGeolocation(profile) {
+        const fallback = () => {
+          const cc = COUNTRY_COORDS[profile.country];
+          if (cc) myCoord = { x: cc.x, y: cc.y, source: 'country', label: cc.label };
+          else    myCoord = { x: 50, y: 50, source: 'fallback', label: 'EARTH' };
+          if (state === 'map') renderMap();
+        };
+        if (!navigator.geolocation) return fallback();
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            const p = latLngToPercent(latitude, longitude);
+            myCoord = { x: p.x, y: p.y, source: 'geo', lat: latitude, lng: longitude };
+            if (state === 'map') renderMap();
+          },
+          () => fallback(),
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 5 * 60 * 1000 }
+        );
+      }
+
+      /* ============================================================
          MAP DATA
-         Trace coordinates are stored as % of the .map-wrap container,
-         which is what the SVG viewBox is fit to (slice). Tweaked so
-         markers fall on the painted landmasses.
+         Coords are stored as % of the .map-wrap container. The world
+         map image (assets/world-map.png) is a stylised non-Mercator
+         layout — coords below were eyeballed against it.
          ============================================================ */
       const COUNTRY_COORDS = {
-        NL: { x: 52, y: 27, label: 'NETHERLANDS' },
-        ES: { x: 50, y: 39, label: 'SPAIN' },
-        PT: { x: 47, y: 40, label: 'PORTUGAL' },
-        FR: { x: 51, y: 32, label: 'FRANCE' },
-        DE: { x: 55, y: 30, label: 'GERMANY' },
-        IT: { x: 56, y: 38, label: 'ITALY' },
-        GB: { x: 48, y: 26, label: 'UK' },
-        IE: { x: 45, y: 26, label: 'IRELAND' },
-        BE: { x: 52, y: 30, label: 'BELGIUM' },
-        US: { x: 20, y: 38, label: 'USA' },
-        MX: { x: 22, y: 50, label: 'MEXICO' },
-        AR: { x: 31, y: 85, label: 'ARGENTINA' },
-        BR: { x: 35, y: 70, label: 'BRAZIL' },
-        JP: { x: 91, y: 38, label: 'JAPAN' },
-        AU: { x: 88, y: 80, label: 'AUSTRALIA' },
+        NL: { x: 50, y: 37, label: 'NETHERLANDS' },
+        ES: { x: 46, y: 42, label: 'SPAIN' },
+        PT: { x: 43, y: 42, label: 'PORTUGAL' },
+        FR: { x: 49, y: 40, label: 'FRANCE' },
+        DE: { x: 52, y: 38, label: 'GERMANY' },
+        IT: { x: 53, y: 42, label: 'ITALY' },
+        GB: { x: 46, y: 36, label: 'UK' },
+        IE: { x: 44, y: 36, label: 'IRELAND' },
+        BE: { x: 50, y: 39, label: 'BELGIUM' },
+        US: { x: 24, y: 25, label: 'USA' },
+        MX: { x: 22, y: 32, label: 'MEXICO' },
+        AR: { x: 33, y: 65, label: 'ARGENTINA' },
+        BR: { x: 38, y: 55, label: 'BRAZIL' },
+        JP: { x: 88, y: 35, label: 'JAPAN' },
+        AU: { x: 82, y: 78, label: 'AUSTRALIA' },
       };
 
       const SEED_TRACES = [
+        // Unlocked (orange / ALBA)
         { id: 's1', quote: 'This beer really reminds me of hot summers spent with my family',
-          icon: '🍒', who: 'MARIA, SPAIN', x: 50, y: 39 },
+          icon: '🍊', who: 'MARIA, SPAIN', x: 46, y: 42 },
         { id: 's2', quote: 'Perfect after a long shift — tastes like the coast.',
-          icon: '🍊', who: 'JOÃO, PORTUGAL', x: 47, y: 40 },
+          icon: '🍊', who: 'JOÃO, PORTUGAL', x: 43, y: 42 },
         { id: 's3', quote: 'Bringing a 6-pack to the rooftop tonight.',
-          icon: '🍊', who: 'EMMA, NETHERLANDS', x: 52, y: 27 },
+          icon: '🍊', who: 'EMMA, NETHERLANDS', x: 50, y: 37 },
         { id: 's4', quote: 'I drank one in the Andes and watched the sun fall.',
-          icon: '🍒', who: 'LUCAS, ARGENTINA', x: 31, y: 85 },
+          icon: '🍊', who: 'LUCAS, ARGENTINA', x: 33, y: 65 },
         { id: 's5', quote: 'Tastes like the orchards back home.',
-          icon: '🍊', who: 'AKIRA, JAPAN', x: 91, y: 38 },
+          icon: '🍊', who: 'AKIRA, JAPAN', x: 88, y: 35 },
         { id: 's6', quote: 'Reminds me of road trips through the desert.',
-          icon: '🍊', who: 'SOFIA, MEXICO', x: 22, y: 50 },
-        { id: 's7', quote: 'Found one in a tiny pub. Slowest, best evening of the week.',
-          icon: '🍒', who: 'OLIVER, UK', x: 48, y: 26 },
-      ];
-
-      const BEE_SPOTS = [
-        { x: 14, y: 22 }, { x: 30, y: 18 }, { x: 60, y: 22 }, { x: 78, y: 32 },
-        { x: 20, y: 60 }, { x: 42, y: 64 }, { x: 70, y: 60 }, { x: 86, y: 50 },
-        { x: 24, y: 80 }, { x: 64, y: 75 }, { x: 88, y: 70 },
+          icon: '🍊', who: 'SOFIA, MEXICO', x: 22, y: 32 },
+        // Locked (other flavors — not the unlocked ALBA orange wheat)
+        { id: 'l1', quote: '', icon: '🍒', who: 'LOCKED', x: 53, y: 42 },
+        { id: 'l2', quote: '', icon: '🍒', who: 'LOCKED', x: 24, y: 25 },
+        { id: 'l3', quote: '', icon: '🍒', who: 'LOCKED', x: 82, y: 78 },
+        { id: 'l4', quote: '', icon: '🍒', who: 'LOCKED', x: 62, y: 50 },
+        { id: 'l5', quote: '', icon: '🍒', who: 'LOCKED', x: 72, y: 60 },
       ];
 
       function getTraces() {
@@ -1336,42 +1767,52 @@
       /* ============================================================
          MAP RENDER
          ============================================================ */
-      const beesLayer   = document.getElementById('map-bees');
       const tracesLayer = document.getElementById('map-traces');
       const bubble      = document.getElementById('trace-bubble');
       const bubIcon     = document.getElementById('bub-icon');
       const bubQuote    = document.getElementById('bub-quote');
       const bubWho      = document.getElementById('bub-who');
 
-      function renderMap() {
-        // Bees
-        beesLayer.innerHTML = '';
-        BEE_SPOTS.forEach((b, i) => {
-          const el = document.createElement('span');
-          el.className = 'bee-mark' + (i % 2 ? ' flip' : '');
-          el.textContent = '🐝';
-          el.style.left = b.x + '%';
-          el.style.top  = b.y + '%';
-          el.style.animationDelay = (i * 0.7) + 's';
-          beesLayer.appendChild(el);
-        });
+      // "You are here" coordinates derived from geolocation OR profile country
+      let myCoord = null;
 
+      function renderMap() {
         // Traces
         tracesLayer.innerHTML = '';
         const all = getTraces();
         all.forEach((t) => {
           const pin = document.createElement('button');
-          pin.className = 'trace-pin' + (t.mine ? ' is-mine' : '');
-          pin.textContent = t.icon || '🍒';
+          // Show locked appearance for any non-orange flavor
+          const locked = t.icon !== '🍊';
+          pin.className = 'trace-pin' + (t.mine ? ' is-mine' : '') + (locked ? ' locked' : '');
+          pin.textContent = locked ? '🔒' : '🍊';
           pin.style.left = t.x + '%';
           pin.style.top  = t.y + '%';
+          pin.dataset.locked = locked ? '1' : '0';
           pin.setAttribute('aria-label', 'Trace from ' + t.who);
           pin.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (locked) {
+              // Locked traces show nothing (only orange is unlocked)
+              haptic([20]);
+              return;
+            }
             openBubble(t, pin);
           });
           tracesLayer.appendChild(pin);
         });
+
+        // "You are here" pin
+        const wrap = document.getElementById('map-wrap');
+        const oldHere = wrap.querySelector('.here-pin');
+        if (oldHere) oldHere.remove();
+        if (myCoord) {
+          const here = document.createElement('div');
+          here.className = 'here-pin';
+          here.style.left = myCoord.x + '%';
+          here.style.top  = myCoord.y + '%';
+          wrap.appendChild(here);
+        }
       }
 
       function openBubble(t, pinEl) {
@@ -1425,17 +1866,26 @@
           try { return JSON.parse(localStorage.getItem('zarra:profile') || '{}'); }
           catch (_) { return {}; }
         })();
-        const cc = COUNTRY_COORDS[profile.country] || { x: 50, y: 50, label: 'EARTH' };
-        // Tiny random jitter so the user's pin doesn't overlap a seed exactly
-        const jx = (Math.random() - 0.5) * 4;
-        const jy = (Math.random() - 0.5) * 4;
+        // Use the live geolocation pin if we have it, else fall back to country
+        let coord, label;
+        if (myCoord) {
+          coord = { x: myCoord.x, y: myCoord.y };
+          const cc = COUNTRY_COORDS[profile.country];
+          label = (cc && cc.label) || 'EARTH';
+        } else {
+          const cc = COUNTRY_COORDS[profile.country] || { x: 50, y: 50, label: 'EARTH' };
+          coord = { x: cc.x, y: cc.y };
+          label = cc.label;
+        }
+        const jx = (Math.random() - 0.5) * 3;
+        const jy = (Math.random() - 0.5) * 3;
         const t = {
           id:    't' + Date.now(),
           quote: traceInput.value.trim(),
           icon:  '🍊', // current unlocked flavor (ALBA / orange)
-          who:   (profile.name || 'YOU').toUpperCase() + ', ' + cc.label,
-          x:     cc.x + jx,
-          y:     cc.y + jy,
+          who:   (profile.name || 'YOU').toUpperCase() + ', ' + label,
+          x:     coord.x + jx,
+          y:     coord.y + jy,
           mine:  true,
         };
         addTrace(t);
@@ -1443,15 +1893,38 @@
         traceSend.disabled = true;
         renderMap();
         haptic([60, 40, 100]);
+        sfx('send');
 
         toast.classList.add('is-on');
         setTimeout(() => toast.classList.remove('is-on'), 1800);
 
-        // Auto-open the new trace
+        // Auto-open the new trace, then prompt to join the community
         requestAnimationFrame(() => {
           const last = tracesLayer.querySelector('.trace-pin.is-mine:last-child');
           if (last) openBubble(t, last);
         });
+        setTimeout(openCommunity, 1500);
+      });
+
+      /* ============================================================
+         COMMUNITY MODAL
+         ============================================================ */
+      const communityOverlay = document.getElementById('community-overlay');
+      function openCommunity() {
+        communityOverlay.hidden = false;
+        requestAnimationFrame(() => communityOverlay.classList.add('is-on'));
+        sfx('success');
+      }
+      function closeCommunity() {
+        communityOverlay.classList.remove('is-on');
+        setTimeout(() => { communityOverlay.hidden = true; }, 360);
+      }
+      document.getElementById('community-close').addEventListener('click', closeCommunity);
+      document.getElementById('community-later').addEventListener('click', closeCommunity);
+      document.getElementById('community-join').addEventListener('click', () => {
+        haptic([40, 30, 80]);
+        sfx('success');
+        closeCommunity();
       });
 
       document.getElementById('map-back').addEventListener('click', () => {
@@ -1486,7 +1959,7 @@
           }
         });
         document.getElementById('dev-skip').addEventListener('click', () => {
-          if (state === 'scan') goTo('bee');
+          if (state === 'scan') { spawnSwarm(); goTo('bee'); }
         });
       }
 
