@@ -406,6 +406,8 @@
         background: transparent;
         pointer-events: none;
         justify-content: flex-end;
+        /* overlay sits above the A-Frame canvas */
+        z-index: 10;
       }
       .bee-msg {
         pointer-events: none;
@@ -441,6 +443,28 @@
         transform: translateY(0);
       }
       .bee-cta:active { transform: scale(0.97); }
+
+      /* HTML bee sprites — rendered in the overlay, always above camera */
+      .bee-sprite {
+        position: fixed;
+        pointer-events: auto;
+        cursor: pointer;
+        user-select: none;
+        line-height: 1;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+        will-change: transform;
+        z-index: 11;
+        transition: filter 0.2s;
+      }
+      .bee-sprite.gold {
+        filter: drop-shadow(0 0 10px rgba(255, 200, 0, 0.9))
+                drop-shadow(0 0 22px rgba(255, 160, 0, 0.6));
+        animation: gold-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes gold-pulse {
+        0%, 100% { filter: drop-shadow(0 0 10px rgba(255,200,0,0.9)) drop-shadow(0 0 22px rgba(255,160,0,0.6)); }
+        50%       { filter: drop-shadow(0 0 18px rgba(255,220,0,1.0)) drop-shadow(0 0 36px rgba(255,180,0,0.9)); }
+      }
 
       /* ==========================================================
          STATE 5 · PROFILE
@@ -1032,16 +1056,7 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false">
-        <a-entity
-          cursor="rayOrigin: mouse; fuse: false"
-          raycaster="objects: .bee-clickable; far: 50"
-        ></a-entity>
-        <!-- Bee swarm is a CHILD of the camera so the bees stay in view
-             regardless of how MindAR sets up the world camera. They do
-             NOT track the marker — finding the can just triggers spawn. -->
-        <a-entity id="bee-swarm"></a-entity>
-      </a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
       <a-entity light="type: ambient; color: #ffd9a0; intensity: 0.95"></a-entity>
       <a-entity light="type: directional; color: #fff2c8; intensity: 0.6" position="0.5 1 1"></a-entity>
 
@@ -1240,67 +1255,82 @@
 
     <script>
       /* ============================================================
-         FREE-FLY — bees wander through a Lissajous path in front of
-         the camera so they appear to roam the screen, independent of
-         any image marker.
+         HTML BEE SWARM — sprites rendered in the screen overlay,
+         always above the A-Frame camera feed. Lissajous paths in
+         screen-% coordinates, animated with requestAnimationFrame.
          ============================================================ */
-      AFRAME.registerComponent('free-fly', {
-        schema: {
-          centerX:  { type: 'number', default: 0 },
-          centerY:  { type: 'number', default: 0 },
-          centerZ:  { type: 'number', default: -1.5 },
-          ampX:     { type: 'number', default: 0.6 },
-          ampY:     { type: 'number', default: 0.35 },
-          ampZ:     { type: 'number', default: 0.2 },
-          speedX:   { type: 'number', default: 0.6 },
-          speedY:   { type: 'number', default: 0.75 },
-          speedZ:   { type: 'number', default: 0.4 },
-          phaseX:   { type: 'number', default: 0 },
-          phaseY:   { type: 'number', default: 0 },
-          phaseZ:   { type: 'number', default: 0 },
-        },
-        init: function () {
-          this.t = Math.random() * 8;
-          this._prev = new THREE.Vector3();
-        },
-        tick: function (time, dt) {
-          if (!dt) return;
-          this.t += dt / 1000;
-          const d = this.data;
-          const x = d.centerX + Math.sin(this.t * d.speedX + d.phaseX) * d.ampX;
-          const y = d.centerY + Math.sin(this.t * d.speedY + d.phaseY) * d.ampY;
-          const z = d.centerZ + Math.sin(this.t * d.speedZ + d.phaseZ) * d.ampZ;
-          const pos = this.el.object3D.position;
-          // face direction of motion
-          const dx = x - pos.x;
-          const dz = z - pos.z;
-          if (Math.abs(dx) > 1e-4 || Math.abs(dz) > 1e-4) {
-            this.el.object3D.rotation.y = Math.atan2(dx, dz);
-          }
-          pos.set(x, y, z);
-        },
-      });
+      let beeSprites = [];
+      let beeAnimFrame = null;
 
-      /* Tint the gold bee’s GLTF materials once loaded. */
-      AFRAME.registerComponent('gold-tint', {
-        init: function () {
-          this.el.addEventListener('model-loaded', () => {
-            const mesh = this.el.getObject3D('mesh');
-            if (!mesh) return;
-            mesh.traverse((node) => {
-              if (node.isMesh && node.material) {
-                const mat = node.material.clone();
-                mat.color = new THREE.Color('#f6c233');
-                if ('emissive' in mat) mat.emissive = new THREE.Color('#7a5500');
-                if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.6;
-                if ('metalness' in mat) mat.metalness = 0.85;
-                if ('roughness' in mat) mat.roughness = 0.25;
-                node.material = mat;
-              }
-            });
+      function spawnSwarm() {
+        if (swarmSpawned) return;
+        swarmSpawned = true;
+        sfx(‘pop’);
+
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+
+        // Each config: cx/cy = centre (0–1 of screen), ax/ay = amplitude
+        // (fraction of screen), sx/sy = angular speed (rad/s), phase offset,
+        // size in px, gold flag.
+        const configs = [
+          { cx:.50, cy:.42, ax:.38, ay:.22, sx:.55, sy:.70, px:0.0, py:1.2, size:52, gold:false },
+          { cx:.48, cy:.38, ax:.30, ay:.18, sx:.85, sy:1.00, px:1.4, py:0.3, size:38, gold:false },
+          { cx:.52, cy:.50, ax:.42, ay:.25, sx:1.10, sy:.55, px:2.5, py:1.8, size:30, gold:false },
+          { cx:.46, cy:.44, ax:.28, ay:.16, sx:.45, sy:.90, px:3.2, py:2.4, size:44, gold:false },
+          { cx:.54, cy:.40, ax:.35, ay:.20, sx:.75, sy:.60, px:0.7, py:3.0, size:34, gold:false },
+          // GOLD — bigger, centred, hard to miss
+          { cx:.50, cy:.44, ax:.32, ay:.19, sx:.50, sy:.70, px:1.0, py:0.0, size:64, gold:true  },
+        ];
+
+        configs.forEach((c, i) => {
+          const el = document.createElement(‘div’);
+          el.className = ‘bee-sprite’ + (c.gold ? ‘ gold’ : ‘’);
+          el.textContent = c.gold ? ‘🐝’ : ‘🐝’;
+          el.style.fontSize = c.size + ‘px’;
+          // Start at centre
+          el.style.left = (c.cx * W - c.size / 2) + ‘px’;
+          el.style.top  = (c.cy * H - c.size / 2) + ‘px’;
+          if (c.gold) {
+            el.style.fontSize = c.size + ‘px’;
+            el.title = ‘Tap me!’;
+            el.addEventListener(‘click’, onGoldBeeClicked);
+            el.addEventListener(‘touchend’, onGoldBeeClicked, { passive: false });
+          }
+          document.body.appendChild(el);
+
+          const t0 = Math.random() * 8;
+          beeSprites.push({ el, c, t: t0, W, H, prevX: 0 });
+        });
+
+        // Animation loop
+        let last = performance.now();
+        function tick(now) {
+          const dt = Math.min((now - last) / 1000, 0.05);
+          last = now;
+          beeSprites.forEach((b) => {
+            b.t += dt;
+            const { c, W, H } = b;
+            const x = c.cx * W + Math.sin(b.t * c.sx + c.px) * c.ax * W;
+            const y = c.cy * H + Math.sin(b.t * c.sy + c.py) * c.ay * H;
+            // Flip horizontally based on direction of travel
+            const dx = x - b.prevX;
+            const flip = dx < 0 ? ‘scaleX(-1)’ : ‘’;
+            b.el.style.transform = flip;
+            b.el.style.left = (x - b.c.size / 2) + ‘px’;
+            b.el.style.top  = (y - b.c.size / 2) + ‘px’;
+            b.prevX = x;
           });
-        },
-      });
+          beeAnimFrame = requestAnimationFrame(tick);
+        }
+        beeAnimFrame = requestAnimationFrame(tick);
+
+        // Fallback Continue button after 5s
+        setTimeout(() => {
+          const cta = document.getElementById(‘bee-cta’);
+          if (state === ‘bee’) cta.hidden = false;
+        }, 5000);
+      }
 
       /* ============================================================
          STATE
@@ -1310,7 +1340,6 @@
       const body = document.body;
       const scene = document.querySelector('a-scene');
       const target0 = document.getElementById('target-0');
-      const beeSwarm = document.getElementById('bee-swarm');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1599,55 +1628,9 @@
 
       function clearSwarm() {
         swarmSpawned = false;
-        while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
-        stopBuzz();
-      }
-
-      function spawnSwarm() {
-        if (swarmSpawned) return;
-        swarmSpawned = true;
-        sfx('pop');
-
-        // Bees are children of the camera (see <a-camera>). All positions
-        // below are CAMERA-RELATIVE: +X right, +Y up, -Z forward. centerZ
-        // of -1.5 means ~1.5m in front of the user.
-        const configs = [
-          { scale: 0.045, gold: false, ampX: 0.55, ampY: 0.30, ampZ: 0.15, speedX: 0.55, speedY: 0.70, speedZ: 0.35, phaseX: 0.0, phaseY: 1.2, phaseZ: 0.5, centerY: 0.05, centerZ: -2.0 },
-          { scale: 0.032, gold: false, ampX: 0.70, ampY: 0.38, ampZ: 0.18, speedX: 0.85, speedY: 1.00, speedZ: 0.50, phaseX: 1.4, phaseY: 0.3, phaseZ: 2.1, centerY: 0.15, centerZ: -2.4 },
-          { scale: 0.025, gold: false, ampX: 0.80, ampY: 0.42, ampZ: 0.20, speedX: 1.10, speedY: 0.55, speedZ: 0.70, phaseX: 2.5, phaseY: 1.8, phaseZ: 0.1, centerY:-0.05, centerZ: -3.0 },
-          { scale: 0.038, gold: false, ampX: 0.45, ampY: 0.25, ampZ: 0.14, speedX: 0.45, speedY: 0.90, speedZ: 0.25, phaseX: 3.2, phaseY: 2.4, phaseZ: 1.6, centerY: 0.10, centerZ: -2.2 },
-          { scale: 0.028, gold: false, ampX: 0.65, ampY: 0.35, ampZ: 0.18, speedX: 0.75, speedY: 0.60, speedZ: 0.55, phaseX: 0.7, phaseY: 3.0, phaseZ: 2.7, centerY:-0.10, centerZ: -2.8 },
-          // GOLD bee — slightly bigger, more central, easy to tap
-          { scale: 0.055, gold: true,  ampX: 0.50, ampY: 0.28, ampZ: 0.15, speedX: 0.50, speedY: 0.70, speedZ: 0.40, phaseX: 1.0, phaseY: 0.0, phaseZ: 0.0, centerY: 0.00, centerZ: -2.0 },
-        ];
-        console.log('[bees] spawning', configs.length);
-        configs.forEach((c, i) => {
-          const el = document.createElement('a-entity');
-          el.setAttribute('gltf-model', '#bee-model');
-          el.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
-          el.setAttribute('animation-mixer', 'clip: *; loop: repeat');
-          el.setAttribute('free-fly',
-            `ampX: ${c.ampX}; ampY: ${c.ampY}; ampZ: ${c.ampZ}; ` +
-            `speedX: ${c.speedX}; speedY: ${c.speedY}; speedZ: ${c.speedZ}; ` +
-            `phaseX: ${c.phaseX}; phaseY: ${c.phaseY}; phaseZ: ${c.phaseZ}; ` +
-            `centerY: ${c.centerY}; centerZ: ${c.centerZ}`
-          );
-          el.classList.add('bee-clickable');
-          el.addEventListener('model-loaded', () => console.log('[bees] model-loaded', i, c.gold ? '(GOLD)' : ''));
-          el.addEventListener('model-error',  (e) => console.warn('[bees] model-error', i, e.detail));
-          if (c.gold) {
-            el.setAttribute('gold-tint', '');
-            el.id = 'bee-gold';
-            el.addEventListener('click', onGoldBeeClicked);
-          }
-          beeSwarm.appendChild(el);
-        });
-
-        // Fallback "Continue" so the user is never stuck on this screen.
-        setTimeout(() => {
-          const cta = document.getElementById('bee-cta');
-          if (state === 'bee') cta.hidden = false;
-        }, 4500);
+        if (beeAnimFrame) { cancelAnimationFrame(beeAnimFrame); beeAnimFrame = null; }
+        beeSprites.forEach((b) => b.el.remove());
+        beeSprites = [];
       }
 
       async function onGoldBeeClicked(e) {
