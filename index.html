@@ -90,14 +90,15 @@
         height: 100% !important;
         display: block !important;
       }
-      /* Bee overlay scene — floats above camera feed but below UI chrome */
+      /* Bee overlay scene — transparent canvas always initialised so A-Frame
+         can create a proper WebGL context; visually empty until bees spawn.
+         pointer-events are blocked except when the bee state is active.    */
       #bee-scene {
         z-index: 11 !important;
         pointer-events: none !important;
-        display: none;
+        /* Never display:none — that would kill the WebGL context on init   */
       }
       #bee-scene.bees-active {
-        display: block;
         pointer-events: auto !important;
       }
       .a-enter-vr, .a-enter-ar,
@@ -1059,6 +1060,7 @@
       device-orientation-permission-ui="enabled: false"
       renderer="colorManagement: true, antialias: true, alpha: true"
       color-space="sRGB"
+      background="color: transparent"
       transparent-bg
     >
       <a-assets timeout="30000">
@@ -1288,13 +1290,25 @@
          ============================================================ */
       AFRAME.registerComponent('transparent-bg', {
         init() {
-          this.el.sceneEl.addEventListener('renderstart', () => {
+          const doIt = () => {
             const renderer = this.el.sceneEl.renderer;
             if (renderer) {
               renderer.setClearColor(0x000000, 0);
               renderer.setClearAlpha(0);
             }
-          });
+          };
+          // Apply immediately and also after renderstart in case renderer
+          // isn't ready yet during init.
+          doIt();
+          this.el.sceneEl.addEventListener('renderstart', doIt, { once: true });
+        },
+        tick() {
+          // Re-apply every frame to guard against A-Frame resetting it.
+          const renderer = this.el.sceneEl.renderer;
+          if (renderer) {
+            renderer.setClearColor(0x000000, 0);
+            renderer.setClearAlpha(0);
+          }
         },
       });
 
@@ -1376,7 +1390,7 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        // Show bee overlay scene only during bee state
+        // Enable pointer-events on bee overlay only in bee state
         beeScene.classList.toggle('bees-active', next === 'bee');
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
