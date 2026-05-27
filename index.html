@@ -1107,17 +1107,16 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false">
+        <!-- Bee swarm lives inside the camera so bees orbit the viewer
+             in 3D space regardless of where the can is pointed.       -->
+        <a-entity id="bee-swarm"></a-entity>
+      </a-camera>
 
       <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
       <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
 
-      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-        <!-- World-anchor container: bees live here, position is captured
-             from target's pose at detection so they stay 3D-positioned
-             around the can rather than following micro-jitter. -->
-        <a-entity id="bee-swarm"></a-entity>
-      </a-entity>
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
 
     <!-- WebXR capability badge (only shown if device supports immersive-ar) -->
@@ -1741,21 +1740,26 @@
         // 3D gltf bees in target-local coordinate space.
         // Centred at (0,0,0) = the can's image target centre.
         // amp_* values are in MindAR-space units (≈ target image width).
-        // 2 regular + 1 gold — fewer instances = much less GPU pressure.
-        // animation-mixer removed: rigged animation on 3× a 7 MB GLB was
-        // the primary lag source on mobile.
+        // Bees are camera-children so coords are camera-local:
+        // +X right, +Y up, -Z forward (in front of lens).
+        // 2 regular + 1 gold keeps frame-rate healthy while animation runs.
         const configs = [
-          { scale:0.042, gold:false, ampX:0.45, ampY:0.30, ampZ:0.18, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
-          { scale:0.034, gold:false, ampX:0.38, ampY:0.26, ampZ:0.20, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
-          { scale:0.058, gold:true,  ampX:0.30, ampY:0.20, ampZ:0.12, speedX:0.48, speedY:0.65, speedZ:0.38, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
+          { scale:0.042, gold:false, centerX:0, centerY: 0.05, centerZ:-1.35,
+            ampX:0.52, ampY:0.30, ampZ:0.14, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
+          { scale:0.034, gold:false, centerX:0, centerY:-0.08, centerZ:-1.55,
+            ampX:0.44, ampY:0.28, ampZ:0.18, speedX:0.88, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
+          // GOLD — centre stage, slower orbit
+          { scale:0.060, gold:true,  centerX:0, centerY: 0.00, centerZ:-1.30,
+            ampX:0.38, ampY:0.22, ampZ:0.14, speedX:0.48, speedY:0.65, speedZ:0.38, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
         ];
 
         configs.forEach((c) => {
           const ent = document.createElement('a-entity');
           ent.setAttribute('gltf-model', '#bee-model');
           ent.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
+          ent.setAttribute('animation-mixer', 'timeScale: 1.2');
           ent.setAttribute('free-fly',
-            `centerX:0; centerY:0; centerZ:0; ` +
+            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
             `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
             `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
             `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
@@ -1773,7 +1777,7 @@
           });
           if (c.gold) {
             ent.setAttribute('gold-tint', '');
-            goldBeeEntity = ent;   // keep reference for touch hit-test
+            goldBeeEntity = ent;
           }
           beeSwarm.appendChild(ent);
         });
