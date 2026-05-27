@@ -333,12 +333,12 @@
       /* ==========================================================
          STATE 3 · SCANNING
          ========================================================== */
-      #screen-scan { background: transparent; pointer-events: auto; }
+      #screen-scan { background: transparent; pointer-events: auto; justify-content: center; }
       .scan-frame {
         position: relative;
-        margin-top: 22vh;
-        width: min(70vw, 280px);
+        width: min(62vw, 240px);
         aspect-ratio: 0.62;
+        max-height: 50vh;
         border: 1px solid rgba(253, 246, 227, 0.45);
         animation: scan-pulse 2.4s ease-in-out infinite;
       }
@@ -356,16 +356,19 @@
       .scan-frame > i:nth-child(1) { bottom: -1px; left: -1px;  border-right: 0; border-top: 0; }
       .scan-frame > i:nth-child(2) { bottom: -1px; right: -1px; border-left:  0; border-top: 0; }
       .scan-hint {
-        position: absolute;
-        top: calc(100% + 1.8rem);
+        position: fixed;
         left: 50%;
-        transform: translateX(-50%);
+        top: 50%;
+        transform: translate(-50%, -50%);
         font-family: var(--font-display);
         font-size: 1.3rem;
         letter-spacing: 0.18em;
         color: #fdf6e3;
         white-space: nowrap;
         text-align: center;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+        pointer-events: none;
+        z-index: 11;
       }
       .scan-hint em {
         display: block;
@@ -398,6 +401,38 @@
         backdrop-filter: blur(6px);
       }
       body:not(.is-debug) .dev-skip { display: none; }
+
+      /* ==========================================================
+         2D BEE SWARM (DOM overlay)
+         ========================================================== */
+      #bee-swarm-2d {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .bee-2d {
+        position: absolute;
+        top: 0; left: 0;
+        font-size: 2.2rem;
+        line-height: 1;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+        will-change: transform;
+        user-select: none;
+        pointer-events: none;
+        transform: translate3d(-100px,-100px,0);
+      }
+      .bee-2d.gold {
+        font-size: 3.4rem;
+        cursor: pointer;
+        pointer-events: auto;
+        animation: gold-pulse 1.4s ease-in-out infinite alternate;
+      }
+      @keyframes gold-pulse {
+        from { filter: drop-shadow(0 0 6px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+        to   { filter: drop-shadow(0 0 18px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+      }
 
       /* ==========================================================
          STATE 4 · BEE (AR overlay UI)
@@ -599,8 +634,7 @@
         position: relative;
         width: 100%;
         height: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
+        overflow: auto;
         -webkit-overflow-scrolling: touch;
         scroll-behavior: smooth;
         scrollbar-width: none;
@@ -611,14 +645,12 @@
          Map source aspect ratio: 7001 / 4001 ≈ 1.75. */
       .map-stage {
         position: relative;
-        /* Stage = the inline-scrolled track inside .map-wrap.
-           Fill the screen vertically; width is enforced by aspect ratio
-           so % pin coords remain accurate. Overflows horizontally so the
-           user can pan; we auto-scroll to their location on render. */
         height: 100%;
         aspect-ratio: 1.75 / 1;
         min-width: 100%;
         background: transparent;
+        transform-origin: 0 0;
+        transition: width var(--t-med) var(--ease), height var(--t-med) var(--ease);
       }
       .map-img {
         position: absolute;
@@ -691,27 +723,51 @@
       /* Trace pin (cherry / fruit icon) */
       .trace-pin {
         position: absolute;
-        width: 38px; height: 38px;
-        margin-left: -19px; margin-top: -19px;
+        width: 22px; height: 22px;
+        margin-left: -11px; margin-top: -11px;
         border-radius: 50%;
         background: #fff;
         display: grid;
         place-items: center;
-        font-size: 1.1rem;
+        font-size: 0.7rem;
         line-height: 1;
-        box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-        border: 2px solid #fff;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.22);
+        border: 1.5px solid #fff;
         cursor: pointer;
         z-index: 2;
         transition: transform var(--t-fast) var(--ease);
       }
       .trace-pin:active { transform: scale(0.9); }
-      .trace-pin.is-mine { box-shadow: 0 0 0 3px var(--magenta), 0 6px 14px rgba(0,0,0,0.3); }
+      .trace-pin.is-mine { box-shadow: 0 0 0 2px var(--magenta), 0 4px 10px rgba(0,0,0,0.3); }
       .trace-pin.locked {
         background: rgba(255,255,255,0.55);
         color: rgba(40,28,14,0.5);
-        font-size: 0.95rem;
+        font-size: 0.62rem;
       }
+
+      /* Map zoom controls */
+      .map-zoom {
+        position: absolute;
+        right: 1rem;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 11rem);
+        z-index: 7;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      .map-zoom button {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.92);
+        color: var(--ink);
+        font-size: 1.2rem;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.18);
+        line-height: 1;
+      }
+      .map-zoom button:active { transform: scale(0.93); }
 
       /* Trace bubble (quote callout) */
       .trace-bubble {
@@ -1054,22 +1110,12 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false">
-        <!-- Bee swarm: entities are added/removed by spawnSwarm()/clearSwarm() -->
-        <a-entity id="bee-swarm"></a-entity>
-        <!-- Cursor raycasts against .bee entities; enabled only in bee state -->
-        <a-entity
-          id="ar-cursor"
-          cursor="fuse: false; rayOrigin: mouse"
-          raycaster="objects: .bee; far: 5; enabled: false">
-        </a-entity>
-      </a-camera>
-
-      <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
-      <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
-
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
+
+    <!-- 2D bee swarm overlay (shown after target is detected) -->
+    <div id="bee-swarm-2d" aria-hidden="true"></div>
 
     <!-- ============================================================
          STATE 1 · INTRO / MAIN MENU
@@ -1128,10 +1174,10 @@
     <section id="screen-scan" class="screen">
       <div class="scan-frame">
         <i></i><i></i>
-        <div class="scan-hint">
-          <span data-i18n="scanFind">Find the can</span>
-          <em data-i18n="scanFrame">Frame it within</em>
-        </div>
+      </div>
+      <div class="scan-hint">
+        <span data-i18n="scanFind">Find the can</span>
+        <em data-i18n="scanFrame">Frame it within</em>
       </div>
       <button class="dev-skip" id="dev-skip">Skip detect →</button>
     </section>
@@ -1141,7 +1187,7 @@
          ============================================================ -->
     <section id="screen-bee" class="screen">
       <p class="bee-msg" data-i18n="beeMsg">Catch the golden bee…</p>
-      <button class="bee-cta" id="bee-cta" data-i18n="beeCta" hidden>Continue</button>
+      <button class="bee-cta" id="bee-cta" data-i18n="beeCta" hidden style="display:none">Continue</button>
     </section>
     <div class="bee-hint" id="bee-hint" data-i18n="beeMsg">Catch the golden bee…</div>
 
@@ -1227,6 +1273,11 @@
             <span>📍</span>
           </span>
         </div>
+      </div>
+
+      <div class="map-zoom" id="map-zoom">
+        <button id="zoom-in" aria-label="Zoom in" type="button">+</button>
+        <button id="zoom-out" aria-label="Zoom out" type="button">−</button>
       </div>
 
       <div class="trace-panel">
@@ -1328,8 +1379,7 @@
       const body = document.body;
       const scene = document.querySelector('a-scene');
       const target0 = document.getElementById('target-0');
-      const beeSwarm  = document.getElementById('bee-swarm');
-      const arCursor  = document.getElementById('ar-cursor');
+      const beeSwarm  = document.getElementById('bee-swarm-2d');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1340,8 +1390,7 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        // Enable cursor raycasting only when bees are active
-        if (arCursor) arCursor.setAttribute('raycaster', 'enabled', next === 'bee');
+        beeSwarm.style.display = (next === 'bee') ? 'block' : 'none';
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
@@ -1453,8 +1502,8 @@
         const nx = parallaxCurrent.x;
         const ny = parallaxCurrent.y;
         if (introBg) {
-          introBg.style.transform   = `translate3d(${nx * -22}px, ${ny * -16}px, 0) scale(1.08)`;
-          introMist.style.transform = `translate3d(${nx * -36}px, ${ny * -24}px, 0)`;
+          introBg.style.transform   = `translate3d(${nx * 22}px, ${ny * 16}px, 0) scale(1.08)`;
+          introMist.style.transform = `translate3d(${nx * 36}px, ${ny * 24}px, 0)`;
         }
         requestAnimationFrame(tickParallax);
       }
@@ -1603,9 +1652,15 @@
         }
       });
 
+      let beeRafId = null;
+      let beeStartT = 0;
+      let beeNodes = [];
+
       function clearSwarm() {
         swarmSpawned = false;
         document.getElementById('bee-cta').hidden = true;
+        if (beeRafId) { cancelAnimationFrame(beeRafId); beeRafId = null; }
+        beeNodes = [];
         while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
 
@@ -1614,58 +1669,48 @@
         swarmSpawned = true;
         sfx('pop');
 
-        // Camera-relative coords: +X right, +Y up, -Z forward
+        // 2D bee configs — Lissajous paths in viewport space (% of vw/vh)
         const configs = [
-          { scale:0.045, gold:false, centerX:0, centerY: 0.05, centerZ:-1.4, ampX:0.55, ampY:0.32, ampZ:0.16, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
-          { scale:0.035, gold:false, centerX:0, centerY: 0.18, centerZ:-1.2, ampX:0.45, ampY:0.26, ampZ:0.14, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
-          { scale:0.025, gold:false, centerX:0, centerY:-0.06, centerZ:-1.6, ampX:0.65, ampY:0.38, ampZ:0.18, speedX:1.10, speedY:0.55, speedZ:0.70, phaseX:2.5, phaseY:1.8, phaseZ:0.1 },
-          { scale:0.040, gold:false, centerX:0, centerY: 0.10, centerZ:-1.1, ampX:0.40, ampY:0.24, ampZ:0.14, speedX:0.45, speedY:0.90, speedZ:0.25, phaseX:3.2, phaseY:2.4, phaseZ:1.6 },
-          { scale:0.030, gold:false, centerX:0, centerY:-0.12, centerZ:-1.5, ampX:0.58, ampY:0.34, ampZ:0.18, speedX:0.75, speedY:0.60, speedZ:0.55, phaseX:0.7, phaseY:3.0, phaseZ:2.7 },
-          // GOLD — bigger, centre-screen
-          { scale:0.070, gold:true,  centerX:0, centerY: 0.00, centerZ:-1.3, ampX:0.45, ampY:0.26, ampZ:0.16, speedX:0.50, speedY:0.70, speedZ:0.40, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
+          { gold:false, size:'2.0rem', cx:50, cy:55, ampX:32, ampY:22, sx:0.55, sy:0.70, px:0.0, py:1.2 },
+          { gold:false, size:'1.7rem', cx:50, cy:42, ampX:38, ampY:26, sx:0.85, sy:1.00, px:1.4, py:0.3 },
+          { gold:false, size:'1.4rem', cx:50, cy:60, ampX:42, ampY:30, sx:1.10, sy:0.55, px:2.5, py:1.8 },
+          { gold:false, size:'1.9rem', cx:50, cy:48, ampX:28, ampY:20, sx:0.45, sy:0.90, px:3.2, py:2.4 },
+          { gold:false, size:'1.5rem', cx:50, cy:65, ampX:36, ampY:26, sx:0.75, sy:0.60, px:0.7, py:3.0 },
+          // GOLD — centre-screen, slower
+          { gold:true,  size:null,     cx:50, cy:50, ampX:26, ampY:18, sx:0.50, sy:0.70, px:1.0, py:0.0 },
         ];
 
         configs.forEach((c) => {
-          const ent = document.createElement('a-entity');
-          ent.classList.add('bee');
-          ent.setAttribute('gltf-model', '#bee-model');
-          ent.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
-          ent.setAttribute('animation-mixer', '');
-          ent.setAttribute('free-fly',
-            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
-            `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
-            `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
-            `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
-          );
-          if (c.gold) ent.setAttribute('gold-tint', '');
-
-          // Force bees to render on top of the MindAR camera background
-          ent.addEventListener('model-loaded', () => {
-            ent.object3D.traverse((node) => {
-              if (!node.isMesh) return;
-              node.renderOrder = 999;
-              if (!c.gold) {
-                // gold-tint component handles its own material; only patch regular bees
-                node.material = node.material.clone();
-                node.material.depthTest = false;
-                node.material.needsUpdate = true;
-              }
-            });
-          });
-
+          const el = document.createElement('div');
+          el.className = 'bee-2d' + (c.gold ? ' gold' : '');
+          if (c.size) el.style.fontSize = c.size;
+          el.textContent = '🐝';
           if (c.gold) {
-            ent.addEventListener('click', onGoldBeeClicked);
-          } else {
-            ent.addEventListener('click', () => sfx('click'));
+            el.addEventListener('click', onGoldBeeClicked);
           }
-
-          beeSwarm.appendChild(ent);
+          beeSwarm.appendChild(el);
+          beeNodes.push({ el, cfg: c, lastDx: 0 });
         });
 
-        // Fallback continue button appears after bees have been flying a while
-        setTimeout(() => {
-          if (state === 'bee') document.getElementById('bee-cta').hidden = false;
-        }, 4500);
+        beeStartT = performance.now();
+        const tick = (now) => {
+          const t = (now - beeStartT) / 1000;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          beeNodes.forEach((b) => {
+            const c = b.cfg;
+            const x = c.cx + Math.sin(t * c.sx + c.px) * c.ampX; // % of vw
+            const y = c.cy + Math.sin(t * c.sy + c.py) * c.ampY; // % of vh
+            const px = (x / 100) * vw;
+            const py = (y / 100) * vh;
+            // Flip horizontally based on direction of motion
+            const dx = Math.cos(t * c.sx + c.px) * c.sx;
+            const flip = dx < 0 ? -1 : 1;
+            b.el.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%) scaleX(${flip})`;
+          });
+          beeRafId = requestAnimationFrame(tick);
+        };
+        beeRafId = requestAnimationFrame(tick);
       }
 
       async function onGoldBeeClicked() {
@@ -1763,14 +1808,28 @@
          map image (assets/world-map.png) is a stylised non-Mercator
          layout — coords below were eyeballed against it.
          ============================================================ */
-      // Standard equirectangular projection over the FULL stage box.
-      // (The stage has aspect-ratio 1.75:1 — wider than a strict 2:1
-      // equirectangular map, so longitudes get squashed slightly. Tweak
-      // X_GAIN / Y_GAIN below if pins drift on a particular map image.)
-      const MAP_CALIB = { xOffset: 0, yOffset: 0, xGain: 1, yGain: 1 };
+      // The world-map.png is a stylised Mercator-like map with whitespace
+      // padding around the land area. These constants define the actual
+      // plot rectangle (in % of the image / stage) and the Mercator
+      // latitude bounds that map to its top & bottom edges.
+      const MAP_CALIB = {
+        xMin: 5.5,  xMax: 94.5,   // -180° → +180° longitude (linear)
+        yMin: 9.5,  yMax: 86.5,   // top/bottom of plot in image %
+        latTop:  76,              // approximate latitude at yMin (Mercator)
+        latBot: -63,              // approximate latitude at yMax (Mercator)
+      };
+      function _mercY(latDeg) {
+        // Returns Mercator y in [0, 1] where 0=top pole, 1=bottom pole.
+        const lat = Math.max(-85, Math.min(85, latDeg)) * Math.PI / 180;
+        return 0.5 - Math.asinh(Math.tan(lat)) / (2 * Math.PI);
+      }
+      const _Y_TOP = _mercY(MAP_CALIB.latTop);
+      const _Y_BOT = _mercY(MAP_CALIB.latBot);
       function latLngToPct(lat, lng) {
-        const x = ((lng + 180) / 360) * 100 * MAP_CALIB.xGain + MAP_CALIB.xOffset;
-        const y = ((90 - lat) / 180) * 100 * MAP_CALIB.yGain + MAP_CALIB.yOffset;
+        const x = MAP_CALIB.xMin + ((lng + 180) / 360) * (MAP_CALIB.xMax - MAP_CALIB.xMin);
+        const yMerc = _mercY(lat);
+        const yNorm = (yMerc - _Y_TOP) / (_Y_BOT - _Y_TOP);
+        const y = MAP_CALIB.yMin + yNorm * (MAP_CALIB.yMax - MAP_CALIB.yMin);
         return { x, y };
       }
       const COUNTRIES_LL = {
@@ -2043,6 +2102,42 @@
       document.getElementById('map-back').addEventListener('click', () => {
         haptic([30]);
         restart();
+      });
+
+      /* ============================================================
+         MAP ZOOM
+         ============================================================ */
+      let mapZoom = 1;
+      const MAP_ZOOM_MIN = 1;
+      const MAP_ZOOM_MAX = 4;
+      function applyMapZoom(focusXPct, focusYPct) {
+        const wrap = document.getElementById('map-wrap');
+        const stage = document.getElementById('map-stage');
+        if (!wrap || !stage) return;
+        // Compute the natural (1x) size based on wrap height
+        const baseH = wrap.clientHeight;
+        const baseW = baseH * 1.75;
+        const targetW = Math.max(wrap.clientWidth, baseW * mapZoom);
+        const targetH = baseH * mapZoom;
+        stage.style.width = targetW + 'px';
+        stage.style.height = targetH + 'px';
+        stage.style.aspectRatio = 'auto';
+        requestAnimationFrame(() => {
+          const fx = (focusXPct != null ? focusXPct : (myCoord ? myCoord.x : 50)) / 100;
+          const fy = (focusYPct != null ? focusYPct : (myCoord ? myCoord.y : 50)) / 100;
+          wrap.scrollLeft = Math.max(0, Math.min(targetW - wrap.clientWidth, fx * targetW - wrap.clientWidth / 2));
+          wrap.scrollTop  = Math.max(0, Math.min(targetH - wrap.clientHeight, fy * targetH - wrap.clientHeight / 2));
+        });
+      }
+      document.getElementById('zoom-in').addEventListener('click', () => {
+        haptic([15]);
+        mapZoom = Math.min(MAP_ZOOM_MAX, mapZoom + 0.5);
+        applyMapZoom();
+      });
+      document.getElementById('zoom-out').addEventListener('click', () => {
+        haptic([15]);
+        mapZoom = Math.max(MAP_ZOOM_MIN, mapZoom - 0.5);
+        applyMapZoom();
       });
 
       /* ============================================================
