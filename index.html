@@ -1107,7 +1107,13 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false">
+        <a-entity
+          id="ar-cursor"
+          cursor="fuse: false; rayOrigin: mouse"
+          raycaster="objects: .bee; far: 6; enabled: false">
+        </a-entity>
+      </a-camera>
 
       <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
       <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
@@ -1422,6 +1428,7 @@
       const scene = document.querySelector('a-scene');
       const target0  = document.getElementById('target-0');
       const beeSwarm = document.getElementById('bee-swarm');
+      const arCursor = document.getElementById('ar-cursor');
       const xrBadge  = document.getElementById('xr-badge');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
@@ -1433,6 +1440,7 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
+        if (arCursor) arCursor.setAttribute('raycaster', 'enabled', next === 'bee');
         if (xrBadge) xrBadge.classList.toggle('is-on', next === 'bee' && webxrSupported);
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
@@ -1688,7 +1696,6 @@
          the MindAR camera background plane in the same WebGL context.
          ============================================================ */
       let swarmSpawned = false;
-      let goldBeeEntity = null;
 
       /* ----------- WebXR capability probe -----------------------
        * MindAR drives the active AR session (it owns the camera + render
@@ -1728,7 +1735,6 @@
 
       function clearSwarm() {
         swarmSpawned = false;
-        goldBeeEntity = null;
         document.getElementById('bee-cta').hidden = true;
         while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
@@ -1741,25 +1747,29 @@
         // 3D gltf bees in target-local coordinate space.
         // Centred at (0,0,0) = the can's image target centre.
         // amp_* values are in MindAR-space units (≈ target image width).
-        // 2 regular + 1 gold — fewer instances = much less GPU pressure.
-        // animation-mixer removed: rigged animation on 3× a 7 MB GLB was
-        // the primary lag source on mobile.
         const configs = [
-          { scale:0.042, gold:false, ampX:0.45, ampY:0.30, ampZ:0.18, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
-          { scale:0.034, gold:false, ampX:0.38, ampY:0.26, ampZ:0.20, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
-          { scale:0.058, gold:true,  ampX:0.30, ampY:0.20, ampZ:0.12, speedX:0.48, speedY:0.65, speedZ:0.38, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
+          { scale:0.045, gold:false, centerX:0, centerY:0, centerZ:0, ampX:0.45, ampY:0.30, ampZ:0.18, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
+          { scale:0.035, gold:false, centerX:0, centerY:0, centerZ:0, ampX:0.38, ampY:0.26, ampZ:0.20, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
+          { scale:0.030, gold:false, centerX:0, centerY:0, centerZ:0, ampX:0.55, ampY:0.34, ampZ:0.22, speedX:1.10, speedY:0.55, speedZ:0.70, phaseX:2.5, phaseY:1.8, phaseZ:0.1 },
+          { scale:0.040, gold:false, centerX:0, centerY:0, centerZ:0, ampX:0.30, ampY:0.24, ampZ:0.14, speedX:0.45, speedY:0.90, speedZ:0.25, phaseX:3.2, phaseY:2.4, phaseZ:1.6 },
+          { scale:0.032, gold:false, centerX:0, centerY:0, centerZ:0, ampX:0.48, ampY:0.32, ampZ:0.20, speedX:0.75, speedY:0.60, speedZ:0.55, phaseX:0.7, phaseY:3.0, phaseZ:2.7 },
+          // GOLD — larger, slower, orbits closer to the can
+          { scale:0.060, gold:true,  centerX:0, centerY:0, centerZ:0, ampX:0.32, ampY:0.22, ampZ:0.14, speedX:0.50, speedY:0.70, speedZ:0.40, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
         ];
 
         configs.forEach((c) => {
           const ent = document.createElement('a-entity');
+          ent.classList.add('bee');
           ent.setAttribute('gltf-model', '#bee-model');
           ent.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
+          ent.setAttribute('animation-mixer', 'timeScale: 1.4');
           ent.setAttribute('free-fly',
-            `centerX:0; centerY:0; centerZ:0; ` +
+            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
             `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
             `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
             `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
           );
+          // Force bees to render above the MindAR camera background plane
           ent.addEventListener('model-loaded', () => {
             ent.object3D.traverse((node) => {
               if (!node.isMesh) return;
@@ -1773,34 +1783,11 @@
           });
           if (c.gold) {
             ent.setAttribute('gold-tint', '');
-            goldBeeEntity = ent;   // keep reference for touch hit-test
+            ent.addEventListener('click', onGoldBeeClicked);
           }
           beeSwarm.appendChild(ent);
         });
       }
-
-      // DOM touch handler — MindAR intercepts events before A-Frame's
-      // raycaster sees them, so we project the gold bee's world position
-      // to screen coords and check tap distance ourselves.
-      const _tmpVec = new THREE.Vector3();
-      document.addEventListener('touchend', (e) => {
-        if (state !== 'bee' || !goldBeeEntity) return;
-        const cam = scene.camera;
-        if (!cam) return;
-        const touch = e.changedTouches[0];
-        if (!touch) return;
-        // Project gold bee world position → NDC → screen pixels
-        goldBeeEntity.object3D.getWorldPosition(_tmpVec);
-        _tmpVec.project(cam);
-        const sx = ( _tmpVec.x * 0.5 + 0.5) * window.innerWidth;
-        const sy = (-_tmpVec.y * 0.5 + 0.5) * window.innerHeight;
-        const dx = touch.clientX - sx;
-        const dy = touch.clientY - sy;
-        const hitRadius = Math.min(window.innerWidth, window.innerHeight) * 0.22;
-        if (Math.sqrt(dx*dx + dy*dy) < hitRadius) {
-          onGoldBeeClicked();
-        }
-      }, { passive: true });
 
       async function onGoldBeeClicked() {
         if (state !== 'bee') return;
