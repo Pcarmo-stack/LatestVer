@@ -403,38 +403,6 @@
       body:not(.is-debug) .dev-skip { display: none; }
 
       /* ==========================================================
-         2D BEE SWARM (DOM overlay)
-         ========================================================== */
-      #bee-swarm-2d {
-        position: fixed;
-        inset: 0;
-        z-index: 10;
-        pointer-events: none;
-        overflow: hidden;
-      }
-      .bee-2d {
-        position: absolute;
-        top: 0; left: 0;
-        font-size: 2.2rem;
-        line-height: 1;
-        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
-        will-change: transform;
-        user-select: none;
-        pointer-events: none;
-        transform: translate3d(-100px,-100px,0);
-      }
-      .bee-2d.gold {
-        font-size: 3.4rem;
-        cursor: pointer;
-        pointer-events: auto;
-        animation: gold-pulse 1.4s ease-in-out infinite alternate;
-      }
-      @keyframes gold-pulse {
-        from { filter: drop-shadow(0 0 6px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
-        to   { filter: drop-shadow(0 0 18px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
-      }
-
-      /* ==========================================================
          STATE 4 · BEE (AR overlay UI)
          ========================================================== */
       #screen-bee {
@@ -1110,12 +1078,21 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-      <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
-    </a-scene>
+      <a-camera position="0 0 0" look-controls="enabled: false">
+        <a-entity
+          id="ar-cursor"
+          cursor="fuse: false; rayOrigin: mouse"
+          raycaster="objects: .bee; far: 6; enabled: false">
+        </a-entity>
+      </a-camera>
 
-    <!-- 2D bee swarm overlay (shown after target is detected) -->
-    <div id="bee-swarm-2d" aria-hidden="true"></div>
+      <a-light type="ambient" color="#fff" intensity="1.2"></a-light>
+
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
+        <!-- Bee container — children added by spawnSwarm() -->
+        <a-entity id="bee-swarm"></a-entity>
+      </a-entity>
+    </a-scene>
 
     <!-- ============================================================
          STATE 1 · INTRO / MAIN MENU
@@ -1349,6 +1326,40 @@
         },
       });
 
+      /* emoji-sprite: flat 2D plane with an emoji drawn on a canvas,
+         always facing the camera (billboard), renders above the AR bg. */
+      AFRAME.registerComponent('emoji-sprite', {
+        schema: {
+          emoji: { type: 'string', default: '🐝' },
+          size:  { type: 'number', default: 0.12 },
+          gold:  { type: 'boolean', default: false },
+        },
+        init() {
+          const d = this.data;
+          const c = document.createElement('canvas');
+          c.width = 128; c.height = 128;
+          const ctx = c.getContext('2d');
+          if (d.gold) { ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 28; }
+          ctx.font = '80px serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(d.emoji, 64, 72);
+          const tex = new THREE.CanvasTexture(c);
+          const mat = new THREE.MeshBasicMaterial({
+            map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide,
+          });
+          const geo = new THREE.PlaneGeometry(d.size, d.size);
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.renderOrder = 999;
+          this.el.setObject3D('mesh', mesh);
+        },
+        tick() {
+          // Billboard — always face the active camera
+          const cam = this.el.sceneEl.camera;
+          if (cam) this.el.object3D.quaternion.copy(cam.quaternion);
+        },
+      });
+
       /* gold-tint: turns every mesh gold AND disables depth-test so it
          always renders above the MindAR camera background plane.         */
       AFRAME.registerComponent('gold-tint', {
@@ -1378,8 +1389,9 @@
       let state = 'intro';
       const body = document.body;
       const scene = document.querySelector('a-scene');
-      const target0 = document.getElementById('target-0');
-      const beeSwarm  = document.getElementById('bee-swarm-2d');
+      const target0  = document.getElementById('target-0');
+      const beeSwarm = document.getElementById('bee-swarm');
+      const arCursor = document.getElementById('ar-cursor');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1390,7 +1402,7 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        beeSwarm.style.display = (next === 'bee') ? 'block' : 'none';
+        if (arCursor) arCursor.setAttribute('raycaster', 'enabled', next === 'bee');
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
@@ -1652,15 +1664,9 @@
         }
       });
 
-      let beeRafId = null;
-      let beeStartT = 0;
-      let beeNodes = [];
-
       function clearSwarm() {
         swarmSpawned = false;
         document.getElementById('bee-cta').hidden = true;
-        if (beeRafId) { cancelAnimationFrame(beeRafId); beeRafId = null; }
-        beeNodes = [];
         while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
 
@@ -1669,48 +1675,33 @@
         swarmSpawned = true;
         sfx('pop');
 
-        // 2D bee configs — Lissajous paths in viewport space (% of vw/vh)
+        // Coords are in target-local space (metres relative to the detected can).
+        // The image target's natural scale makes 1 unit ≈ the target image width.
+        // Typical beer-can label is ~7 cm wide → keep amps in the 0.05–0.25 range
+        // so bees orbit visibly but don't fly off into space.
         const configs = [
-          { gold:false, size:'2.0rem', cx:50, cy:55, ampX:32, ampY:22, sx:0.55, sy:0.70, px:0.0, py:1.2 },
-          { gold:false, size:'1.7rem', cx:50, cy:42, ampX:38, ampY:26, sx:0.85, sy:1.00, px:1.4, py:0.3 },
-          { gold:false, size:'1.4rem', cx:50, cy:60, ampX:42, ampY:30, sx:1.10, sy:0.55, px:2.5, py:1.8 },
-          { gold:false, size:'1.9rem', cx:50, cy:48, ampX:28, ampY:20, sx:0.45, sy:0.90, px:3.2, py:2.4 },
-          { gold:false, size:'1.5rem', cx:50, cy:65, ampX:36, ampY:26, sx:0.75, sy:0.60, px:0.7, py:3.0 },
-          // GOLD — centre-screen, slower
-          { gold:true,  size:null,     cx:50, cy:50, ampX:26, ampY:18, sx:0.50, sy:0.70, px:1.0, py:0.0 },
+          { size:0.10, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.18, ampY:0.12, ampZ:0.06, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
+          { size:0.09, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.14, ampY:0.16, ampZ:0.05, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
+          { size:0.08, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.20, ampY:0.10, ampZ:0.07, speedX:1.10, speedY:0.55, speedZ:0.70, phaseX:2.5, phaseY:1.8, phaseZ:0.1 },
+          { size:0.09, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.12, ampY:0.18, ampZ:0.04, speedX:0.45, speedY:0.90, speedZ:0.25, phaseX:3.2, phaseY:2.4, phaseZ:1.6 },
+          { size:0.08, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.16, ampY:0.13, ampZ:0.06, speedX:0.75, speedY:0.60, speedZ:0.55, phaseX:0.7, phaseY:3.0, phaseZ:2.7 },
+          // GOLD — slightly larger, orbits closer to centre
+          { size:0.15, gold:true,  centerX: 0, centerY:0, centerZ:0, ampX:0.10, ampY:0.08, ampZ:0.04, speedX:0.50, speedY:0.70, speedZ:0.40, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
         ];
 
         configs.forEach((c) => {
-          const el = document.createElement('div');
-          el.className = 'bee-2d' + (c.gold ? ' gold' : '');
-          if (c.size) el.style.fontSize = c.size;
-          el.textContent = '🐝';
-          if (c.gold) {
-            el.addEventListener('click', onGoldBeeClicked);
-          }
-          beeSwarm.appendChild(el);
-          beeNodes.push({ el, cfg: c, lastDx: 0 });
+          const ent = document.createElement('a-entity');
+          ent.classList.add('bee');
+          ent.setAttribute('emoji-sprite', `emoji: 🐝; size: ${c.size}; gold: ${c.gold}`);
+          ent.setAttribute('free-fly',
+            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
+            `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
+            `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
+            `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
+          );
+          if (c.gold) ent.addEventListener('click', onGoldBeeClicked);
+          beeSwarm.appendChild(ent);
         });
-
-        beeStartT = performance.now();
-        const tick = (now) => {
-          const t = (now - beeStartT) / 1000;
-          const vw = window.innerWidth;
-          const vh = window.innerHeight;
-          beeNodes.forEach((b) => {
-            const c = b.cfg;
-            const x = c.cx + Math.sin(t * c.sx + c.px) * c.ampX; // % of vw
-            const y = c.cy + Math.sin(t * c.sy + c.py) * c.ampY; // % of vh
-            const px = (x / 100) * vw;
-            const py = (y / 100) * vh;
-            // Flip horizontally based on direction of motion
-            const dx = Math.cos(t * c.sx + c.px) * c.sx;
-            const flip = dx < 0 ? -1 : 1;
-            b.el.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%) scaleX(${flip})`;
-          });
-          beeRafId = requestAnimationFrame(tick);
-        };
-        beeRafId = requestAnimationFrame(tick);
       }
 
       async function onGoldBeeClicked() {
