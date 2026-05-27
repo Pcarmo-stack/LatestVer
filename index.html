@@ -403,6 +403,38 @@
       body:not(.is-debug) .dev-skip { display: none; }
 
       /* ==========================================================
+         2D BEE SWARM OVERLAY
+         ========================================================== */
+      #bee-swarm-2d {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        pointer-events: none;
+        overflow: hidden;
+        display: none;
+      }
+      .bee-2d {
+        position: absolute;
+        top: 0; left: 0;
+        font-size: 2.2rem;
+        line-height: 1;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+        will-change: transform;
+        user-select: none;
+        pointer-events: none;
+      }
+      .bee-2d.gold {
+        font-size: 3.4rem;
+        cursor: pointer;
+        pointer-events: auto;
+        animation: gold-pulse 1.4s ease-in-out infinite alternate;
+      }
+      @keyframes gold-pulse {
+        from { filter: drop-shadow(0 0 6px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+        to   { filter: drop-shadow(0 0 18px #ffd84a) drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
+      }
+
+      /* ==========================================================
          STATE 4 · BEE (AR overlay UI)
          ========================================================== */
       #screen-bee {
@@ -1067,34 +1099,19 @@
          AR SCENE  ·  camera feed + bee swarm + image target detection
          ============================================================ -->
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3; maxTrack: 2;"
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
       color-space="sRGB"
       renderer="colorManagement: true, physicallyCorrectLights: true, antialias: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
       embedded
     >
-      <a-assets>
-        <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
-      </a-assets>
-
-      <a-camera position="0 0 0" look-controls="enabled: false">
-        <a-entity
-          id="ar-cursor"
-          cursor="fuse: false; rayOrigin: mouse"
-          raycaster="objects: .bee; far: 6; enabled: false">
-        </a-entity>
-      </a-camera>
-
-      <a-light type="ambient" color="#fff" intensity="1.2"></a-light>
-
-      <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-        <a-entity id="bee-swarm-0"></a-entity>
-      </a-entity>
-      <a-entity id="target-1" mindar-image-target="targetIndex: 0">
-        <a-entity id="bee-swarm-1"></a-entity>
-      </a-entity>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
+
+    <!-- 2D bee swarm overlay -->
+    <div id="bee-swarm-2d" aria-hidden="true"></div>
 
     <!-- ============================================================
          STATE 1 · INTRO / MAIN MENU
@@ -1390,13 +1407,8 @@
       let state = 'intro';
       const body = document.body;
       const scene = document.querySelector('a-scene');
-      const target0   = document.getElementById('target-0');
-      const target1   = document.getElementById('target-1');
-      const beeSwarms = [
-        document.getElementById('bee-swarm-0'),
-        document.getElementById('bee-swarm-1'),
-      ];
-      const arCursor  = document.getElementById('ar-cursor');
+      const target0  = document.getElementById('target-0');
+      const beeSwarm = document.getElementById('bee-swarm-2d');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1407,7 +1419,7 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        if (arCursor) arCursor.setAttribute('raycaster', 'enabled', next === 'bee');
+        beeSwarm.style.display = (next === 'bee') ? 'block' : 'none';
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
@@ -1660,58 +1672,60 @@
          the MindAR camera background plane in the same WebGL context.
          ============================================================ */
       let swarmSpawned = false;
+      let beeRafId = null;
 
-      function onTargetFound(swarmContainer) {
+      target0.addEventListener('targetFound', () => {
         if (state === 'scan') {
           haptic([80, 60, 140]);
-          swarmSpawned = true;
+          spawnSwarm();
           goTo('bee');
         }
-        // Spawn bees on this instance if not already populated
-        if (swarmContainer.childElementCount === 0) {
-          spawnSwarm(swarmContainer);
-        }
-      }
-
-      target0.addEventListener('targetFound', () => onTargetFound(beeSwarms[0]));
-      target1.addEventListener('targetFound', () => onTargetFound(beeSwarms[1]));
+      });
 
       function clearSwarm() {
         swarmSpawned = false;
         document.getElementById('bee-cta').hidden = true;
-        beeSwarms.forEach((s) => { while (s.firstChild) s.removeChild(s.firstChild); });
+        if (beeRafId) { cancelAnimationFrame(beeRafId); beeRafId = null; }
+        while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
 
-      function spawnSwarm(container) {
+      function spawnSwarm() {
+        if (swarmSpawned) return;
+        swarmSpawned = true;
         sfx('pop');
 
-        // Coords are in target-local space (metres relative to the detected can).
-        // The image target's natural scale makes 1 unit ≈ the target image width.
-        // Typical beer-can label is ~7 cm wide → keep amps in the 0.05–0.25 range
-        // so bees orbit visibly but don't fly off into space.
         const configs = [
-          { size:0.10, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.18, ampY:0.12, ampZ:0.06, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
-          { size:0.09, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.14, ampY:0.16, ampZ:0.05, speedX:0.85, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
-          { size:0.08, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.20, ampY:0.10, ampZ:0.07, speedX:1.10, speedY:0.55, speedZ:0.70, phaseX:2.5, phaseY:1.8, phaseZ:0.1 },
-          { size:0.09, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.12, ampY:0.18, ampZ:0.04, speedX:0.45, speedY:0.90, speedZ:0.25, phaseX:3.2, phaseY:2.4, phaseZ:1.6 },
-          { size:0.08, gold:false, centerX: 0, centerY:0, centerZ:0, ampX:0.16, ampY:0.13, ampZ:0.06, speedX:0.75, speedY:0.60, speedZ:0.55, phaseX:0.7, phaseY:3.0, phaseZ:2.7 },
-          // GOLD — slightly larger, orbits closer to centre
-          { size:0.15, gold:true,  centerX: 0, centerY:0, centerZ:0, ampX:0.10, ampY:0.08, ampZ:0.04, speedX:0.50, speedY:0.70, speedZ:0.40, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
+          { gold:false, size:'2.0rem', cx:50, cy:55, ampX:32, ampY:22, sx:0.55, sy:0.70, px:0.0, py:1.2 },
+          { gold:false, size:'1.7rem', cx:50, cy:42, ampX:38, ampY:26, sx:0.85, sy:1.00, px:1.4, py:0.3 },
+          { gold:false, size:'1.4rem', cx:50, cy:60, ampX:42, ampY:30, sx:1.10, sy:0.55, px:2.5, py:1.8 },
+          { gold:false, size:'1.9rem', cx:50, cy:48, ampX:28, ampY:20, sx:0.45, sy:0.90, px:3.2, py:2.4 },
+          { gold:false, size:'1.5rem', cx:50, cy:65, ampX:36, ampY:26, sx:0.75, sy:0.60, px:0.7, py:3.0 },
+          { gold:true,  size:null,     cx:50, cy:50, ampX:26, ampY:18, sx:0.50, sy:0.70, px:1.0, py:0.0 },
         ];
 
-        configs.forEach((c) => {
-          const ent = document.createElement('a-entity');
-          ent.classList.add('bee');
-          ent.setAttribute('emoji-sprite', `emoji: 🐝; size: ${c.size}; gold: ${c.gold}`);
-          ent.setAttribute('free-fly',
-            `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
-            `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
-            `speedX:${c.speedX}; speedY:${c.speedY}; speedZ:${c.speedZ}; ` +
-            `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
-          );
-          if (c.gold) ent.addEventListener('click', onGoldBeeClicked);
-          container.appendChild(ent);
+        const nodes = configs.map((c) => {
+          const el = document.createElement('div');
+          el.className = 'bee-2d' + (c.gold ? ' gold' : '');
+          if (c.size) el.style.fontSize = c.size;
+          el.textContent = '🐝';
+          if (c.gold) el.addEventListener('click', onGoldBeeClicked);
+          beeSwarm.appendChild(el);
+          return { el, c };
         });
+
+        const t0 = performance.now();
+        const tick = (now) => {
+          const t = (now - t0) / 1000;
+          const vw = window.innerWidth, vh = window.innerHeight;
+          nodes.forEach(({ el, c }) => {
+            const x = c.cx + Math.sin(t * c.sx + c.px) * c.ampX;
+            const y = c.cy + Math.sin(t * c.sy + c.py) * c.ampY;
+            const flip = Math.cos(t * c.sx + c.px) < 0 ? -1 : 1;
+            el.style.transform = `translate3d(${x/100*vw}px,${y/100*vh}px,0) translate(-50%,-50%) scaleX(${flip})`;
+          });
+          beeRafId = requestAnimationFrame(tick);
+        };
+        beeRafId = requestAnimationFrame(tick);
       }
 
       async function onGoldBeeClicked() {
@@ -2168,7 +2182,7 @@
           }
         });
         document.getElementById('dev-skip').addEventListener('click', () => {
-          if (state === 'scan') { swarmSpawned = true; spawnSwarm(beeSwarms[0]); goTo('bee'); }
+          if (state === 'scan') { spawnSwarm(); goTo('bee'); }
         });
       }
 
