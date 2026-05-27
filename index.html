@@ -13,7 +13,6 @@
     <title>Cervecería de Zarra</title>
 
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.5.4/dist/aframe-extras.min.js"></script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -85,6 +84,11 @@
         height: 100% !important;
         z-index: 1;
       }
+      /* WebXR dom-overlay wrapper. display:contents keeps it transparent
+         to layout — its position:fixed children render normally outside
+         AR, and the browser promotes it to the AR overlay layer inside. */
+      #ar-overlay { display: contents; }
+      .a-dom-overlay-root #ar-overlay { display: block; }
       a-scene canvas {
         width: 100% !important;
         height: 100% !important;
@@ -401,35 +405,6 @@
         backdrop-filter: blur(6px);
       }
       body:not(.is-debug) .dev-skip { display: none; }
-
-      /* ==========================================================
-         WEBXR CAPABILITY BADGE
-         ========================================================== */
-      .xr-badge {
-        position: fixed;
-        top: max(env(safe-area-inset-top, 0), 0.9rem);
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 14;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.35rem 0.85rem;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.55);
-        color: #ffd84a;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 216, 74, 0.35);
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.4s ease;
-      }
-      .xr-badge.is-on { opacity: 1; }
-      body:not([data-state="bee"]) .xr-badge { opacity: 0; }
 
       /* ==========================================================
          STATE 4 · BEE (AR overlay UI)
@@ -1096,36 +1071,44 @@
          AR SCENE  ·  camera feed + bee swarm + image target detection
          ============================================================ -->
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
-      color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights: true, antialias: true"
+      webxr="optionalFeatures: hit-test, dom-overlay, local-floor; overlayElement: #ar-overlay"
+      ar-mode-ui="enabled: false"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
+      renderer="colorManagement: true, physicallyCorrectLights: true, antialias: true, alpha: true"
+      background="transparent: true"
+      ar-hit-test
       embedded
     >
       <a-assets>
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 1.5 0" look-controls="enabled: false"></a-camera>
 
       <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
       <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
 
-      <!-- bee-world is counter-rotated by device orientation every frame
-           so its children appear fixed in real-world space.            -->
+      <!-- Reticle shown on detected surfaces — user taps to spawn bees. -->
+      <a-entity id="ar-reticle" visible="false">
+        <a-ring color="#FFD84A" radius-inner="0.06" radius-outer="0.085"
+                rotation="-90 0 0" material="shader: flat; opacity: 0.85"></a-ring>
+        <a-ring color="#FFFFFF" radius-inner="0.092" radius-outer="0.10"
+                rotation="-90 0 0" material="shader: flat; opacity: 0.45"></a-ring>
+      </a-entity>
+
+      <!-- bee-world is anchored at the chosen spawn point in real space.
+           WebXR's 6DoF tracking keeps this stable in the world as the
+           user walks around — no manual gyro counter-rotation needed. -->
       <a-entity id="bee-world">
         <a-entity id="bee-swarm"></a-entity>
       </a-entity>
-
-      <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
 
-    <!-- WebXR capability badge (only shown if device supports immersive-ar) -->
-    <div class="xr-badge" id="xr-badge">
-      <span>✦</span>
-      <span data-i18n="xrReady">Spatial mode</span>
-    </div>
+    <!-- DOM overlay: wraps all HTML UI so it's visible during the WebXR
+         session via the dom-overlay feature. Without this wrapper the
+         page DOM is hidden once immersive-ar starts.                   -->
+    <div id="ar-overlay">
 
     <!-- ============================================================
          STATE 1 · INTRO / MAIN MENU
@@ -1320,6 +1303,7 @@
 
     <div class="toast" id="toast" data-i18n="toast">Your trace is on the map ✦</div>
     <button class="restart-btn" id="restart-btn" title="Restart">↺</button>
+    </div><!-- /#ar-overlay -->
 
     <script>
       /* ============================================================
@@ -1421,10 +1405,9 @@
       let state = 'intro';
       const body = document.body;
       const scene = document.querySelector('a-scene');
-      const target0  = document.getElementById('target-0');
+      const reticle  = document.getElementById('ar-reticle');
       const beeWorld = document.getElementById('bee-world');
       const beeSwarm = document.getElementById('bee-swarm');
-      const xrBadge  = document.getElementById('xr-badge');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1435,7 +1418,6 @@
         body.dataset.state = next;
         state = next;
         document.getElementById('bee-hint').classList.toggle('is-on', next === 'bee');
-        if (xrBadge) xrBadge.classList.toggle('is-on', next === 'bee' && webxrSupported);
         if (next === 'map') renderMap();
         if (next !== 'bee' && next !== 'scan') clearSwarm();
       }
@@ -1453,11 +1435,10 @@
           permBody: 'zarra.cervesa wants to use your camera<br/>to bring something to life',
           permDeny: 'Not Now',
           permAllow: 'Allow',
-          scanFind: 'Find the can',
-          scanFrame: 'Frame it within',
+          scanFind: 'Point at the can',
+          scanFrame: 'Then tap to release the bees',
           beeMsg: 'Catch the golden bee…',
           beeCta: 'Continue',
-          xrReady: 'Spatial mode',
           profTitle: 'TELL US ABOUT<br/>YOURSELF',
           profCountry: 'Select your country',
           profName: 'Your name',
@@ -1482,11 +1463,10 @@
           permBody: 'zarra.cervesa quiere usar tu cámara<br/>para dar vida a algo',
           permDeny: 'Ahora No',
           permAllow: 'Permitir',
-          scanFind: 'Encuentra la lata',
-          scanFrame: 'Encuádrala dentro',
+          scanFind: 'Apunta a la lata',
+          scanFrame: 'Toca para liberar las abejas',
           beeMsg: 'Atrapa la abeja dorada…',
           beeCta: 'Continuar',
-          xrReady: 'Modo espacial',
           profTitle: 'CUÉNTANOS<br/>SOBRE TI',
           profCountry: 'Selecciona tu país',
           profName: 'Tu nombre',
@@ -1639,22 +1619,110 @@
       }, true);
 
       /* ============================================================
-         MIND-AR START — happens after user taps Allow
+         WEBXR HIT-TEST COMPONENT
+         Drives a reticle on detected surfaces. Tapping the screen in
+         the 'scan' state spawns bees at the hit position. WebXR
+         provides 6DoF tracking, so once placed the bees stay fixed in
+         physical space and the user walks around to find them.
          ============================================================ */
-      async function startMindAR() {
+      AFRAME.registerComponent('ar-hit-test', {
+        init() {
+          this.scene = this.el;
+          this.hitTestSource = null;
+          this.refSpace = null;
+          this.viewerSpace = null;
+          this.lastHit = null;
+          this._tmpPos = new THREE.Vector3();
+          this._tmpQuat = new THREE.Quaternion();
+          this.scene.addEventListener('enter-vr', () => this.onEnterAR());
+          this.scene.addEventListener('exit-vr',  () => this.onExitAR());
+        },
+        async onEnterAR() {
+          if (!this.scene.is('ar-mode')) return;
+          const session = this.scene.xrSession;
+          if (!session) return;
+          try {
+            this.viewerSpace = await session.requestReferenceSpace('viewer');
+            this.refSpace    = this.scene.renderer.xr.getReferenceSpace();
+            this.hitTestSource = await session.requestHitTestSource({ space: this.viewerSpace });
+          } catch (e) {
+            console.warn('[ar-hit-test] not available:', e);
+          }
+          this._onSelect = () => this.onSelect();
+          session.addEventListener('select', this._onSelect);
+        },
+        onExitAR() {
+          if (this.hitTestSource) {
+            try { this.hitTestSource.cancel(); } catch(_) {}
+            this.hitTestSource = null;
+          }
+          reticle.setAttribute('visible', false);
+        },
+        tick() {
+          const frame = this.scene.frame;
+          if (!frame || !this.hitTestSource || !this.refSpace) return;
+          const hits = frame.getHitTestResults(this.hitTestSource);
+          if (hits.length > 0) {
+            const pose = hits[0].getPose(this.refSpace);
+            const p = pose.transform.position;
+            const q = pose.transform.orientation;
+            reticle.object3D.position.set(p.x, p.y, p.z);
+            reticle.object3D.quaternion.set(q.x, q.y, q.z, q.w);
+            this.lastHit = { x: p.x, y: p.y, z: p.z };
+            // Only show reticle while scanning
+            if (state === 'scan') reticle.setAttribute('visible', true);
+          } else {
+            reticle.setAttribute('visible', false);
+            this.lastHit = null;
+          }
+        },
+        onSelect() {
+          // Tap fires this XR-native event. Only act during scan.
+          if (state !== 'scan') return;
+          // Use surface hit if available, otherwise spawn 0.8 m forward.
+          let pos = this.lastHit;
+          if (!pos) {
+            const cam = this.scene.camera;
+            cam.getWorldPosition(this._tmpPos);
+            const forward = new THREE.Vector3(0, 0, -0.8).applyQuaternion(cam.getWorldQuaternion(this._tmpQuat));
+            pos = { x: this._tmpPos.x + forward.x, y: this._tmpPos.y + forward.y, z: this._tmpPos.z + forward.z };
+          }
+          haptic([80, 60, 140]);
+          spawnSwarmAt(pos.x, pos.y, pos.z);
+          reticle.setAttribute('visible', false);
+          goTo('bee');
+        },
+      });
+
+      /* ============================================================
+         WEBXR SESSION START / STOP
+         ============================================================ */
+      let webxrSupported = false;
+      async function checkWebXR() {
+        if (!('xr' in navigator)) return false;
+        try { return !!(await navigator.xr.isSessionSupported('immersive-ar')); }
+        catch(_) { return false; }
+      }
+      async function startWebXR() {
+        webxrSupported = await checkWebXR();
+        if (!webxrSupported) {
+          alert('Your browser does not support WebXR immersive AR.\nUse Chrome on Android, or Edge / Brave with WebXR enabled.');
+          goTo('intro');
+          return;
+        }
         try {
-          const sys = scene.systems['mindar-image-system'];
-          if (sys && sys.start) await sys.start();
+          // A-Frame exposes enterAR(); we ask for hit-test as an optional feature.
+          await scene.enterAR();
         } catch (e) {
-          console.error('mindar start failed:', e);
-          alert('Could not start the camera. Please allow camera access and reload.');
+          console.error('[WebXR] enterAR failed:', e);
+          alert('Could not start AR session: ' + (e.message || e));
+          goTo('intro');
         }
       }
-      async function stopMindAR() {
+      async function stopWebXR() {
         try {
-          const sys = scene.systems['mindar-image-system'];
-          if (sys && sys.stop) await sys.stop();
-        } catch (_) {}
+          if (scene.is('ar-mode')) await scene.exitVR();
+        } catch(_) {}
       }
 
       /* ============================================================
@@ -1662,7 +1730,7 @@
          ============================================================ */
       document.getElementById('start-btn').addEventListener('click', () => {
         haptic([60]);
-        enableGyro();        // user gesture → satisfies iOS permission prompt
+        enableGyro();
         ensureAudio();
         goTo('permission');
       });
@@ -1678,51 +1746,20 @@
       document.getElementById('perm-allow').addEventListener('click', async () => {
         haptic([80]);
         goTo('scan');
-        const start = () => startMindAR();
+        const start = () => startWebXR();
         if (scene.hasLoaded) await start();
         else scene.addEventListener('loaded', start, { once: true });
       });
 
       /* ============================================================
-         SCAN → BEE (target detection)
-         Bees float in camera space — finding the can triggers the swarm.
-         renderOrder:999 + depthTest:false makes them always visible above
-         the MindAR camera background plane in the same WebGL context.
+         SCAN → BEE
+         WebXR's `select` event (from the hit-test component above) is
+         what triggers the swarm. No image detection — the user taps
+         while pointing the phone at the can, and bees spawn at the
+         hit-test point. WebXR's 6DoF tracking keeps them anchored.
          ============================================================ */
       let swarmSpawned = false;
       let goldBeeEntity = null;
-
-      /* ============================================================
-         DEVICE-ORIENTATION → BEE-WORLD counter-rotation
-         Applies the inverse of the phone's real-world rotation to the
-         #bee-world container each frame, so its children appear fixed
-         in physical space while the camera stays stationary (MindAR
-         keeps a-camera at 0,0,0 always).
-         ============================================================ */
-      const _devQ   = new THREE.Quaternion();
-      const _devE   = new THREE.Euler();
-      const _screenQ = new THREE.Quaternion();
-      const _adjustQ = new THREE.Quaternion()
-            .setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI / 2);
-
-      function onDeviceOrientationBee(evt) {
-        if (state !== 'bee') return;
-        const deg = Math.PI / 180;
-        const screenAngle = (screen.orientation?.angle ?? window.orientation ?? 0);
-        _devE.set(
-          (evt.beta  || 0) * deg,
-          (evt.alpha || 0) * deg,
-          -(evt.gamma || 0) * deg,
-          'YXZ'
-        );
-        _devQ.setFromEuler(_devE);
-        _screenQ.setFromAxisAngle(new THREE.Vector3(0,0,1), -screenAngle * deg);
-        _devQ.multiply(_screenQ).multiply(_adjustQ);
-        // Invert so the world container counter-rotates with the phone
-        beeWorld.object3D.quaternion.copy(_devQ).invert();
-      }
-
-      window.addEventListener('deviceorientation', onDeviceOrientationBee);
 
       /* ============================================================
          BEE BUZZ SOUND  (WebAudio, procedural)
@@ -1770,42 +1807,6 @@
         _buzzOsc = null; _buzzLfo = null; _buzzGain = null;
       }
 
-      /* ----------- WebXR capability probe -----------------------
-       * MindAR drives the active AR session (it owns the camera + render
-       * loop). WebXR ImmersiveAR cannot run concurrently with MindAR, so
-       * we only probe for capability here — the badge surfaces to the
-       * user that their device supports spatial-anchor-class tracking
-       * for future enhancements (hit-test, anchors, light-estimation).
-       * ---------------------------------------------------------- */
-      let webxrSupported = false;
-      let webxrFeatures = { hitTest: false, anchors: false, lightEstimation: false };
-      (async () => {
-        if (!('xr' in navigator)) return;
-        try {
-          const ok = await navigator.xr.isSessionSupported('immersive-ar');
-          webxrSupported = !!ok;
-          if (webxrSupported) {
-            // Optional-features probe — non-blocking
-            const probes = ['hit-test', 'anchors', 'light-estimation'];
-            for (const f of probes) {
-              try {
-                const s = await navigator.xr.isSessionSupported('immersive-ar', { optionalFeatures: [f] });
-                webxrFeatures[f.replace(/-([a-z])/g, (_,c) => c.toUpperCase())] = !!s;
-              } catch(_) {}
-            }
-            console.log('[WebXR] immersive-ar supported. Features:', webxrFeatures);
-          }
-        } catch(_) {}
-      })();
-
-      target0.addEventListener('targetFound', () => {
-        if (state === 'scan') {
-          haptic([80, 60, 140]);
-          spawnSwarm();
-          goTo('bee');
-        }
-      });
-
       function clearSwarm() {
         swarmSpawned = false;
         goldBeeEntity = null;
@@ -1814,32 +1815,40 @@
         while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
 
-      function spawnSwarm() {
+      function spawnSwarmAt(x, y, z) {
         if (swarmSpawned) return;
         swarmSpawned = true;
         sfx('pop');
         startBuzz();
 
+        // Anchor bee-world at the hit-test point and reset rotation —
+        // WebXR's reference space handles tracking from here.
+        beeWorld.object3D.position.set(x, y, z);
+        beeWorld.object3D.quaternion.identity();
+
         // Bees live in #bee-world which is counter-rotated by device
         // orientation each frame, so they stay fixed in real-world space.
         // Large ampX/Y means they wander far enough off-screen that the
         // user must rotate the phone to find them.
+        // bee-world is anchored at the can position (the hit-test point).
+        // ampZ ≈ 1.2 means bees roam ±1.2 m forward/back from the can —
+        // far enough to fly behind the user who's ~0.5–1 m from the can.
         const configs = [
           { scale:0.042, gold:false,
-            centerX: 0.20, centerY: 0.05, centerZ:-1.35,
-            ampX:0.70, ampY:0.45, ampZ:0.22,
-            speedX:0.50, speedY:0.65, speedZ:0.32,
+            centerX: 0.30, centerY: 0.25, centerZ: 0.10,
+            ampX:1.10, ampY:0.55, ampZ:1.20,
+            speedX:0.48, speedY:0.62, speedZ:0.34,
             phaseX:0.0,  phaseY:1.2,  phaseZ:0.5  },
           { scale:0.036, gold:false,
-            centerX:-0.25, centerY:-0.10, centerZ:-1.50,
-            ampX:0.65, ampY:0.42, ampZ:0.20,
-            speedX:0.82, speedY:0.95, speedZ:0.48,
+            centerX:-0.35, centerY: 0.15, centerZ:-0.15,
+            ampX:1.00, ampY:0.50, ampZ:1.10,
+            speedX:0.80, speedY:0.92, speedZ:0.46,
             phaseX:1.4,  phaseY:0.3,  phaseZ:2.1  },
-          // GOLD — centre, slower, slightly closer
+          // GOLD — centre, slower, slightly closer to the spawn point
           { scale:0.058, gold:true,
-            centerX: 0.00, centerY: 0.00, centerZ:-1.25,
-            ampX:0.55, ampY:0.35, ampZ:0.18,
-            speedX:0.42, speedY:0.58, speedZ:0.35,
+            centerX: 0.00, centerY: 0.20, centerZ: 0.00,
+            ampX:0.80, ampY:0.40, ampZ:0.70,
+            speedX:0.40, speedY:0.55, speedZ:0.32,
             phaseX:1.0,  phaseY:0.0,  phaseZ:0.0  },
         ];
 
@@ -1900,14 +1909,14 @@
         if (state !== 'bee') return;
         haptic([40, 30, 80]);
         sfx('gold');
-        await stopMindAR();
+        await stopWebXR();
         clearSwarm();
         goTo('profile');
       }
 
       document.getElementById('bee-cta').addEventListener('click', async () => {
         haptic([60]);
-        await stopMindAR();
+        await stopWebXR();
         clearSwarm();
         goTo('profile');
       });
@@ -2331,7 +2340,7 @@
         traceInput.value = '';
         traceSend.disabled = true;
         goTo('intro');
-        stopMindAR();
+        stopWebXR();
       }
       document.getElementById('restart-btn').addEventListener('click', restart);
 
@@ -2350,7 +2359,7 @@
           }
         });
         document.getElementById('dev-skip').addEventListener('click', () => {
-          if (state === 'scan') { spawnSwarm(); goTo('bee'); }
+          if (state === 'scan') { spawnSwarmAt(0, 1.2, -1); goTo('bee'); }
         });
       }
 
