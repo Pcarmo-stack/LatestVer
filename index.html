@@ -1067,7 +1067,7 @@
          AR SCENE  ·  camera feed + bee swarm + image target detection
          ============================================================ -->
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3;"
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.005; missTolerance: 20; warmupTolerance: 3; maxTrack: 2;"
       color-space="sRGB"
       renderer="colorManagement: true, physicallyCorrectLights: true, antialias: true"
       vr-mode-ui="enabled: false"
@@ -1089,8 +1089,10 @@
       <a-light type="ambient" color="#fff" intensity="1.2"></a-light>
 
       <a-entity id="target-0" mindar-image-target="targetIndex: 0">
-        <!-- Bee container — children added by spawnSwarm() -->
-        <a-entity id="bee-swarm"></a-entity>
+        <a-entity id="bee-swarm-0"></a-entity>
+      </a-entity>
+      <a-entity id="target-1" mindar-image-target="targetIndex: 0">
+        <a-entity id="bee-swarm-1"></a-entity>
       </a-entity>
     </a-scene>
 
@@ -1163,7 +1165,6 @@
          STATE 4 · BEE (AR overlay UI)
          ============================================================ -->
     <section id="screen-bee" class="screen">
-      <p class="bee-msg" data-i18n="beeMsg">Catch the golden bee…</p>
       <button class="bee-cta" id="bee-cta" data-i18n="beeCta" hidden style="display:none">Continue</button>
     </section>
     <div class="bee-hint" id="bee-hint" data-i18n="beeMsg">Catch the golden bee…</div>
@@ -1389,9 +1390,13 @@
       let state = 'intro';
       const body = document.body;
       const scene = document.querySelector('a-scene');
-      const target0  = document.getElementById('target-0');
-      const beeSwarm = document.getElementById('bee-swarm');
-      const arCursor = document.getElementById('ar-cursor');
+      const target0   = document.getElementById('target-0');
+      const target1   = document.getElementById('target-1');
+      const beeSwarms = [
+        document.getElementById('bee-swarm-0'),
+        document.getElementById('bee-swarm-1'),
+      ];
+      const arCursor  = document.getElementById('ar-cursor');
 
       function haptic(p) { try { navigator.vibrate && navigator.vibrate(p || [10]); } catch(_) {} }
 
@@ -1656,23 +1661,28 @@
          ============================================================ */
       let swarmSpawned = false;
 
-      target0.addEventListener('targetFound', () => {
+      function onTargetFound(swarmContainer) {
         if (state === 'scan') {
           haptic([80, 60, 140]);
-          spawnSwarm();
+          swarmSpawned = true;
           goTo('bee');
         }
-      });
+        // Spawn bees on this instance if not already populated
+        if (swarmContainer.childElementCount === 0) {
+          spawnSwarm(swarmContainer);
+        }
+      }
+
+      target0.addEventListener('targetFound', () => onTargetFound(beeSwarms[0]));
+      target1.addEventListener('targetFound', () => onTargetFound(beeSwarms[1]));
 
       function clearSwarm() {
         swarmSpawned = false;
         document.getElementById('bee-cta').hidden = true;
-        while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
+        beeSwarms.forEach((s) => { while (s.firstChild) s.removeChild(s.firstChild); });
       }
 
-      function spawnSwarm() {
-        if (swarmSpawned) return;
-        swarmSpawned = true;
+      function spawnSwarm(container) {
         sfx('pop');
 
         // Coords are in target-local space (metres relative to the detected can).
@@ -1700,7 +1710,7 @@
             `phaseX:${c.phaseX}; phaseY:${c.phaseY}; phaseZ:${c.phaseZ}`
           );
           if (c.gold) ent.addEventListener('click', onGoldBeeClicked);
-          beeSwarm.appendChild(ent);
+          container.appendChild(ent);
         });
       }
 
@@ -2158,7 +2168,7 @@
           }
         });
         document.getElementById('dev-skip').addEventListener('click', () => {
-          if (state === 'scan') { spawnSwarm(); goTo('bee'); }
+          if (state === 'scan') { swarmSpawned = true; spawnSwarm(beeSwarms[0]); goTo('bee'); }
         });
       }
 
