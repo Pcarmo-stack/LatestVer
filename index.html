@@ -1107,14 +1107,16 @@
         <a-asset-item id="bee-model" src="./assets/bee.glb"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false">
-        <!-- Bee swarm lives inside the camera so bees orbit the viewer
-             in 3D space regardless of where the can is pointed.       -->
-        <a-entity id="bee-swarm"></a-entity>
-      </a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-light type="ambient" color="#ffd9a0" intensity="0.95"></a-light>
       <a-light type="directional" color="#fff2c8" intensity="0.6" position="0.5 1 1"></a-light>
+
+      <!-- bee-world is counter-rotated by device orientation every frame
+           so its children appear fixed in real-world space.            -->
+      <a-entity id="bee-world">
+        <a-entity id="bee-swarm"></a-entity>
+      </a-entity>
 
       <a-entity id="target-0" mindar-image-target="targetIndex: 0"></a-entity>
     </a-scene>
@@ -1420,6 +1422,7 @@
       const body = document.body;
       const scene = document.querySelector('a-scene');
       const target0  = document.getElementById('target-0');
+      const beeWorld = document.getElementById('bee-world');
       const beeSwarm = document.getElementById('bee-swarm');
       const xrBadge  = document.getElementById('xr-badge');
 
@@ -1689,6 +1692,84 @@
       let swarmSpawned = false;
       let goldBeeEntity = null;
 
+      /* ============================================================
+         DEVICE-ORIENTATION → BEE-WORLD counter-rotation
+         Applies the inverse of the phone's real-world rotation to the
+         #bee-world container each frame, so its children appear fixed
+         in physical space while the camera stays stationary (MindAR
+         keeps a-camera at 0,0,0 always).
+         ============================================================ */
+      const _devQ   = new THREE.Quaternion();
+      const _devE   = new THREE.Euler();
+      const _screenQ = new THREE.Quaternion();
+      const _adjustQ = new THREE.Quaternion()
+            .setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI / 2);
+
+      function onDeviceOrientationBee(evt) {
+        if (state !== 'bee') return;
+        const deg = Math.PI / 180;
+        const screenAngle = (screen.orientation?.angle ?? window.orientation ?? 0);
+        _devE.set(
+          (evt.beta  || 0) * deg,
+          (evt.alpha || 0) * deg,
+          -(evt.gamma || 0) * deg,
+          'YXZ'
+        );
+        _devQ.setFromEuler(_devE);
+        _screenQ.setFromAxisAngle(new THREE.Vector3(0,0,1), -screenAngle * deg);
+        _devQ.multiply(_screenQ).multiply(_adjustQ);
+        // Invert so the world container counter-rotates with the phone
+        beeWorld.object3D.quaternion.copy(_devQ).invert();
+      }
+
+      window.addEventListener('deviceorientation', onDeviceOrientationBee);
+
+      /* ============================================================
+         BEE BUZZ SOUND  (WebAudio, procedural)
+         Sawtooth osc → bandpass → gain, AM-modulated by a 230 Hz LFO
+         to mimic the wing-beat rhythm. Very quiet (gain ≈ 0.025).
+         ============================================================ */
+      let _buzzOsc = null, _buzzLfo = null, _buzzGain = null;
+
+      function startBuzz() {
+        const ctx = ensureAudio();
+        if (!ctx || _buzzOsc) return;
+        if (!masterGain) {
+          masterGain = ctx.createGain();
+          masterGain.gain.value = 0.75;
+          masterGain.connect(ctx.destination);
+        }
+        const osc    = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const lfo    = ctx.createOscillator();
+        const lfoG   = ctx.createGain();
+        const gain   = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.value = 220;
+        filter.type = 'bandpass';
+        filter.frequency.value = 310;
+        filter.Q.value = 1.8;
+        lfo.frequency.value = 230;
+        lfoG.gain.value = 0.018;
+        gain.gain.value = 0.025;
+
+        osc.connect(filter).connect(gain).connect(masterGain);
+        lfo.connect(lfoG).connect(gain.gain);
+        osc.start(); lfo.start();
+        _buzzOsc = osc; _buzzLfo = lfo; _buzzGain = gain;
+      }
+
+      function stopBuzz() {
+        if (!_buzzOsc || !audioCtx) return;
+        try {
+          _buzzGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+          const o = _buzzOsc, l = _buzzLfo;
+          setTimeout(() => { try { o.stop(); l.stop(); } catch(_){} }, 600);
+        } catch(_) {}
+        _buzzOsc = null; _buzzLfo = null; _buzzGain = null;
+      }
+
       /* ----------- WebXR capability probe -----------------------
        * MindAR drives the active AR session (it owns the camera + render
        * loop). WebXR ImmersiveAR cannot run concurrently with MindAR, so
@@ -1728,6 +1809,7 @@
       function clearSwarm() {
         swarmSpawned = false;
         goldBeeEntity = null;
+        stopBuzz();
         document.getElementById('bee-cta').hidden = true;
         while (beeSwarm.firstChild) beeSwarm.removeChild(beeSwarm.firstChild);
       }
@@ -1736,28 +1818,36 @@
         if (swarmSpawned) return;
         swarmSpawned = true;
         sfx('pop');
+        startBuzz();
 
-        // 3D gltf bees in target-local coordinate space.
-        // Centred at (0,0,0) = the can's image target centre.
-        // amp_* values are in MindAR-space units (≈ target image width).
-        // Bees are camera-children so coords are camera-local:
-        // +X right, +Y up, -Z forward (in front of lens).
-        // 2 regular + 1 gold keeps frame-rate healthy while animation runs.
+        // Bees live in #bee-world which is counter-rotated by device
+        // orientation each frame, so they stay fixed in real-world space.
+        // Large ampX/Y means they wander far enough off-screen that the
+        // user must rotate the phone to find them.
         const configs = [
-          { scale:0.042, gold:false, centerX:0, centerY: 0.05, centerZ:-1.35,
-            ampX:0.52, ampY:0.30, ampZ:0.14, speedX:0.55, speedY:0.70, speedZ:0.35, phaseX:0.0, phaseY:1.2, phaseZ:0.5 },
-          { scale:0.034, gold:false, centerX:0, centerY:-0.08, centerZ:-1.55,
-            ampX:0.44, ampY:0.28, ampZ:0.18, speedX:0.88, speedY:1.00, speedZ:0.50, phaseX:1.4, phaseY:0.3, phaseZ:2.1 },
-          // GOLD — centre stage, slower orbit
-          { scale:0.060, gold:true,  centerX:0, centerY: 0.00, centerZ:-1.30,
-            ampX:0.38, ampY:0.22, ampZ:0.14, speedX:0.48, speedY:0.65, speedZ:0.38, phaseX:1.0, phaseY:0.0, phaseZ:0.0 },
+          { scale:0.042, gold:false,
+            centerX: 0.20, centerY: 0.05, centerZ:-1.35,
+            ampX:0.70, ampY:0.45, ampZ:0.22,
+            speedX:0.50, speedY:0.65, speedZ:0.32,
+            phaseX:0.0,  phaseY:1.2,  phaseZ:0.5  },
+          { scale:0.036, gold:false,
+            centerX:-0.25, centerY:-0.10, centerZ:-1.50,
+            ampX:0.65, ampY:0.42, ampZ:0.20,
+            speedX:0.82, speedY:0.95, speedZ:0.48,
+            phaseX:1.4,  phaseY:0.3,  phaseZ:2.1  },
+          // GOLD — centre, slower, slightly closer
+          { scale:0.058, gold:true,
+            centerX: 0.00, centerY: 0.00, centerZ:-1.25,
+            ampX:0.55, ampY:0.35, ampZ:0.18,
+            speedX:0.42, speedY:0.58, speedZ:0.35,
+            phaseX:1.0,  phaseY:0.0,  phaseZ:0.0  },
         ];
 
         configs.forEach((c) => {
           const ent = document.createElement('a-entity');
           ent.setAttribute('gltf-model', '#bee-model');
           ent.setAttribute('scale', `${c.scale} ${c.scale} ${c.scale}`);
-          ent.setAttribute('animation-mixer', 'timeScale: 1.2');
+          ent.setAttribute('animation-mixer', 'timeScale: 2.2');
           ent.setAttribute('free-fly',
             `centerX:${c.centerX}; centerY:${c.centerY}; centerZ:${c.centerZ}; ` +
             `ampX:${c.ampX}; ampY:${c.ampY}; ampZ:${c.ampZ}; ` +
